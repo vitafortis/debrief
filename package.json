@@ -1,0 +1,21 @@
+{
+  "name": "debrief",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check",
+    "db:generate": "pnpm --filter @debrief/core db:generate",
+    "db:migrate": "pnpm --filter @debrief/core db:migrate",
+    "test": "pnpm --filter @debrief/core test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}

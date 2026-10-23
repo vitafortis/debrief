@@ -3,3 +3,16 @@ node_modules/
 .env
 .env.*
 !.env.example
+.next/
+dist/
+coverage/
+test-results/
+playwright-report/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+/data/
+secrets/
+next-env.d.ts
+*.tsbuildinfo
