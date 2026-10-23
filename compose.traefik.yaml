@@ -1,0 +1,33 @@
+# HTTPS through Traefik instead of plain ports. In .env:
+#   COMPOSE_FILE=compose.yaml:compose.traefik.yaml
+#   DEBRIEF_HOST=debrief.example.com
+# Expects an external Docker network "traefik" and an entrypoint "websecure";
+# rename them below if yours differ.
+services:
+  web:
+    ports: !reset []
+    networks: [default, traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.debrief.rule=Host(`${DEBRIEF_HOST:?set DEBRIEF_HOST in .env}`)
+      - traefik.http.routers.debrief.entrypoints=websecure
+      - traefik.http.routers.debrief.tls=true
+      - traefik.http.services.debrief.loadbalancer.server.port=3000
+
+  # Same host, /mcp. Claude authenticates with an API key, so keep any SSO
+  # middleware off this router (and off /api/recorder on the one above).
+  mcp-server:
+    ports: !reset []
+    networks: [default, traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.debrief-mcp.rule=Host(`${DEBRIEF_HOST:?set DEBRIEF_HOST in .env}`) && PathPrefix(`/mcp`)
+      - traefik.http.routers.debrief-mcp.entrypoints=websecure
+      - traefik.http.routers.debrief-mcp.tls=true
+      - traefik.http.services.debrief-mcp.loadbalancer.server.port=3001
+
+networks:
+  traefik:
+    external: true

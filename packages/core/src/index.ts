@@ -7,3 +7,5 @@ export * from "./tasks";
 export * from "./extract";
 export * from "./apikeys";
 export * from "./notes";
+export * from "./settings";
+export * from "./storage";

@@ -13,7 +13,8 @@ COPY debrief_transcriber ./debrief_transcriber
 RUN if [ "$DIARIZE" = "true" ]; then \
       pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio && pip install ".[diarize]"; \
     else pip install .; fi
-RUN useradd -u 1000 -m app && mkdir -p /models && chown app /models
+# The volumes are writable by any user, so compose.nas.yaml can run it as the NAS share's owner.
+RUN useradd -u 1000 -m app && mkdir -p /models /data/recordings && chmod 777 /models /data/recordings
 USER app
 VOLUME /models
 CMD ["debrief-transcriber"]

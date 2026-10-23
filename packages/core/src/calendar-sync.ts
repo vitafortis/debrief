@@ -5,6 +5,7 @@ import ical, { type VEvent } from "node-ical";
 import type { Db } from "./db";
 import { calendarEvents, calendars, eventAttendees } from "./schema";
 import { correlateUnmatched } from "./correlate";
+import { setting, settingNumber } from "./settings";
 
 /** A calendar event in the shape Debrief stores, whatever it came from. */
 export type NormalizedEvent = {
@@ -19,8 +20,6 @@ export type NormalizedEvent = {
   attendees: { email: string; name: string | null; rsvpStatus: string | null }[];
 };
 
-const DAYS_BACK = Number(process.env.SYNC_DAYS_BACK ?? 30);
-const DAYS_AHEAD = Number(process.env.SYNC_DAYS_AHEAD ?? 14);
 
 const CONFERENCE_RE =
   /https:\/\/(?:[\w-]+\.)?(?:zoom\.us\/(?:j|my|w)\/[^\s<>"']+|meet\.google\.com\/[a-z0-9-]+|app\.slack\.com\/huddle\/[^\s<>"']+|teams\.microsoft\.com\/l\/meetup-join\/[^\s<>"']+)/i;
@@ -36,8 +35,8 @@ export function findConferenceUrl(...texts: (string | null | undefined)[]) {
 
 export function syncWindow(now = new Date()) {
   return {
-    from: new Date(now.getTime() - DAYS_BACK * 86400_000),
-    to: new Date(now.getTime() + DAYS_AHEAD * 86400_000),
+    from: new Date(now.getTime() - settingNumber("SYNC_DAYS_BACK") * 86400_000),
+    to: new Date(now.getTime() + settingNumber("SYNC_DAYS_AHEAD") * 86400_000),
   };
 }
 
@@ -57,29 +56,36 @@ type GoogleEvent = {
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };
 
-let googleClient: Promise<AuthClient | null> | null = null;
+let googleClient: { raw: string; client: Promise<AuthClient | null> } | null = null;
+
+/** The Google credentials JSON: pasted in Settings, or a file named by GOOGLE_CREDENTIALS_FILE. */
+async function googleCredentials() {
+  const file = process.env.GOOGLE_CREDENTIALS_FILE;
+  // An empty or missing file means "no Google".
+  const raw = file ? await fs.readFile(file, "utf8").catch(() => "") : "";
+  return raw.trim() || setting("GOOGLE_CREDENTIALS").trim();
+}
 
 /**
- * Google credentials from GOOGLE_CREDENTIALS_FILE: a service account key (share
- * each calendar with its address) or an OAuth "authorized_user" file with a
- * refresh token (sees everything the account can).
+ * A Google client from a service account key (share each calendar with its
+ * address) or an OAuth "authorized_user" file with a refresh token (sees
+ * everything the account can). Made again when the credentials change.
  */
-export function googleAuth(): Promise<AuthClient | null> {
-  googleClient ??= (async () => {
-    const file = process.env.GOOGLE_CREDENTIALS_FILE;
-    if (!file) return null;
-    // compose mounts the secret either way; an empty or missing file means "no Google".
-    const raw = await fs.readFile(file, "utf8").catch(() => "");
-    if (!raw.trim()) return null;
-    const json = JSON.parse(raw);
-    if (json.type === "authorized_user") {
-      const client = new OAuth2Client(json.client_id, json.client_secret);
-      client.setCredentials({ refresh_token: json.refresh_token });
-      return client;
-    }
-    return new GoogleAuth({ credentials: json, scopes: ["https://www.googleapis.com/auth/calendar.readonly"] }).getClient();
-  })();
-  return googleClient;
+export async function googleAuth(): Promise<AuthClient | null> {
+  const raw = await googleCredentials();
+  if (googleClient?.raw !== raw) googleClient = { raw, client: makeGoogleClient(raw) };
+  return googleClient.client;
+}
+
+async function makeGoogleClient(raw: string): Promise<AuthClient | null> {
+  if (!raw) return null;
+  const json = JSON.parse(raw);
+  if (json.type === "authorized_user") {
+    const client = new OAuth2Client(json.client_id, json.client_secret);
+    client.setCredentials({ refresh_token: json.refresh_token });
+    return client;
+  }
+  return new GoogleAuth({ credentials: json, scopes: ["https://www.googleapis.com/auth/calendar.readonly"] }).getClient();
 }
 
 async function googleGet<T>(client: AuthClient, url: string): Promise<T> {

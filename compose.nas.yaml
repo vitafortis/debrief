@@ -1,0 +1,36 @@
+# A NAS share mounted on the server (NFS or SMB), for archiving recordings to
+# (Settings → Recordings → Archive to: the NAS folder), watching for recordings
+# from Meetily or Syncthing, and the .txt / .json / .notes.md exports. In .env:
+#   COMPOSE_FILE=compose.yaml:compose.nas.yaml
+#   AUDIO_PATH=/mnt/meetings/audio       # defaults shown
+#   EXPORTS_PATH=/mnt/meetings/exports
+#   MEETINGS_UID=99                      # the share's owner (99/100 on Unraid)
+#   MEETINGS_GID=100
+x-nas: &nas
+  user: ${MEETINGS_UID:-1000}:${MEETINGS_GID:-1000}
+
+services:
+  web:
+    <<: *nas
+    volumes:
+      - ${AUDIO_PATH:-/mnt/meetings/audio}:/mnt/meetings/audio
+    environment:
+      AUDIO_DIR: /mnt/meetings/audio
+
+  transcriber:
+    <<: *nas
+    volumes:
+      - ${AUDIO_PATH:-/mnt/meetings/audio}:/mnt/meetings/audio
+      - ${EXPORTS_PATH:-/mnt/meetings/exports}:/mnt/meetings/exports
+    environment:
+      AUDIO_DIR: /mnt/meetings/audio
+      EXPORT_DIR: /mnt/meetings/exports
+
+  calendar-sync:
+    <<: *nas
+    volumes:
+      - ${AUDIO_PATH:-/mnt/meetings/audio}:/mnt/meetings/audio
+      - ${EXPORTS_PATH:-/mnt/meetings/exports}:/mnt/meetings/exports
+    environment:
+      AUDIO_DIR: /mnt/meetings/audio
+      EXPORT_DIR: /mnt/meetings/exports

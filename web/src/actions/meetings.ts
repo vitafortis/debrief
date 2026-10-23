@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { extractWithClaude, linkTranscript, recordings, requestPublish, slackConfigured, transcripts } from "@debrief/core";
+import { extractWithClaude, linkTranscript, recordings, requestPublish, restoreLocal, slackConfigured, transcripts } from "@debrief/core";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -66,11 +66,14 @@ export async function setMeetingEvent(transcriptId: string, eventId: string | nu
 
 export async function retranscribe(recordingId: string) {
   return run(async () => {
-    await db()
-      .update(recordings)
-      .set({ status: "pending", progress: null, error: null })
-      .where(eq(recordings.id, uuid.parse(recordingId)));
-    return "Queued. The transcriber picks it up on its next pass.";
+    const id = uuid.parse(recordingId);
+    const [rec] = await db().select().from(recordings).where(eq(recordings.id, id));
+    if (!rec) throw new Error("No such recording.");
+    // The transcriber reads from the server or the NAS: bring an S3 recording back first.
+    await restoreLocal(rec);
+    await db().update(recordings).set({ status: "pending", progress: null, error: null }).where(eq(recordings.id, id));
+    await db().execute(sql`select pg_notify('debrief_recording', ${id})`);
+    return "Queued for the transcriber.";
   }, "/");
 }
 

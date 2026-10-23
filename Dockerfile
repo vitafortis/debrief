@@ -21,12 +21,13 @@ RUN pnpm --filter web build \
 FROM node:24-alpine AS runtime
 LABEL org.opencontainers.image.source=https://github.com/vitafortis/debrief
 ENV NODE_ENV=production
-# tzdata so TZ sets the zone meetings are shown in.
-RUN apk add --no-cache tzdata
+# tzdata for time zones. The recordings volume is writable by any user, so
+# compose.nas.yaml can run the services as the NAS share's owner.
+RUN apk add --no-cache tzdata && mkdir -p /data/recordings && chmod 777 /data/recordings
 WORKDIR /app
 
 FROM runtime AS web
-ENV PORT=3000 HOSTNAME=0.0.0.0 MIGRATIONS_DIR=/app/drizzle AUDIO_DIR=/mnt/meetings/audio
+ENV PORT=3000 HOSTNAME=0.0.0.0 MIGRATIONS_DIR=/app/drizzle
 COPY --from=build /repo/web/.next/standalone ./
 COPY --from=build /repo/web/.next/static ./web/.next/static
 COPY --from=build /repo/packages/core/drizzle ./drizzle

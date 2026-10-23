@@ -29,7 +29,7 @@ export default defineConfig({
       TZ: "America/New_York",
       PUBLIC_URL: `http://localhost:${PORT}`,
       // Where the recorder upload test writes.
-      AUDIO_DIR: path.join(os.tmpdir(), "debrief-e2e-audio"),
+      RECORDINGS_DIR: path.join(os.tmpdir(), "debrief-e2e-recordings"),
     },
   },
 });

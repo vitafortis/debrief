@@ -127,15 +127,18 @@ test.describe("signed in", () => {
     await page.goto("/meetings");
     await expect(page.getByText("lumen roadmap")).toBeVisible();
     await expect(page.getByText("Northwind onboarding call")).toHaveCount(0);
-    await page.goto("/calendar");
+    // The seed puts these three days either side of today, so look at each day rather than this week.
+    const day = (n: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(Date.now() + n * 86400_000));
+    await page.goto(`/calendar?view=day&date=${day(3)}`);
     await expect(page.getByText("Beta demo")).toBeVisible();
+    await page.goto(`/calendar?view=day&date=${day(-3)}`);
     await expect(page.getByText("Quarterly planning")).toHaveCount(0);
     await page.getByRole("button", { name: "All", exact: true }).click();
     await expect(page.getByText("Quarterly planning")).toBeVisible();
   });
 
   test("settings: a bad ICS link is refused, and a calendar can be switched off", async ({ page }) => {
-    await page.goto("/settings");
+    await page.goto("/settings/calendars");
     await page.getByRole("button", { name: "Add" }).click();
     await page.locator("#cal-source").selectOption("ics");
     await page.locator("#cal-id").fill("not a link");
@@ -146,7 +149,7 @@ test.describe("signed in", () => {
     await expect(page.getByText("Off", { exact: true }).first()).toBeVisible();
     await page.goto("/");
     await expect(page.getByRole("button", { name: "lumen" })).toHaveCount(0);
-    await page.goto("/settings");
+    await page.goto("/settings/calendars");
     await page.getByLabel("Sync lumen").check();
     await expect(page.locator("p", { hasText: /^Synced/ })).toHaveCount(2);
     await page.goto("/");
@@ -154,7 +157,7 @@ test.describe("signed in", () => {
   });
 
   test("a key from Settings lets the recorder upload; then its device can be tagged and the key revoked", async ({ page, request }) => {
-    await page.goto("/settings");
+    await page.goto("/settings/devices");
     await page.getByLabel("Key name").fill("E2E MacBook");
     await page.getByRole("button", { name: "Create key" }).click();
     const key = (await page.locator("code", { hasText: /^dbk_/ }).textContent())!.trim();
@@ -172,7 +175,8 @@ test.describe("signed in", () => {
     expect(stale.status()).toBe(409);
     expect((await stale.json()).offset).toBe(body.length);
     const done = await request.post(`${base}/complete`, { headers: auth, data: { bytes: body.length, durationSecs: 3 } });
-    expect(await done.json()).toMatchObject({ status: "completed" });
+    // Queued for the transcriber straight away.
+    expect(await done.json()).toMatchObject({ status: "completed", recording: "pending" });
 
     await page.reload();
     const ctx = page.getByLabel("Context for e2e-mac");
@@ -186,5 +190,28 @@ test.describe("signed in", () => {
     await page.locator("div", { hasText: /^E2E MacBook/ }).getByTitle("Revoke").click();
     await expect(page.getByText("Key revoked.")).toBeVisible();
     expect((await request.get("/api/recorder/ping", { headers: auth })).status()).toBe(401);
+  });
+
+  test("settings: a saved setting sticks, a secret isn't shown back, and .env values are locked", async ({ page }) => {
+    await page.goto("/settings/claude");
+    await page.getByLabel("Model").fill("claude-e2e-model");
+    await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-not-real");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Model")).toHaveValue("claude-e2e-model");
+    await expect(page.getByLabel("Anthropic API key")).toHaveValue("");
+    await expect(page.getByLabel("Anthropic API key")).toHaveAttribute("placeholder", /Saved/);
+    expect(await page.content()).not.toContain("sk-ant-e2e-not-real");
+    await page.getByRole("button", { name: "Remove" }).click();
+    await page.getByLabel("Model").fill("");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+
+    // PUBLIC_URL, TZ and OWNER_NAME come from the test server's environment.
+    await page.goto("/settings");
+    await expect(page.getByText(".env", { exact: true })).toHaveCount(3);
+    await page.goto("/settings/sign-in");
+    await expect(page.getByText(/Set by DEBRIEF_PASSWORD in the environment/)).toBeVisible();
   });
 });

@@ -1,22 +1,51 @@
 /**
  * calendar-sync: pulls calendar events every few minutes and links
  * transcripts to their meetings. Also wakes up when the transcriber finishes
- * a recording (to link it, then have Claude summarize it when an API key is
- * set), when a summary is saved (to write the notes file and tell Slack),
- * and when "Sync now" is pressed.
+ * a recording (to link it, have Claude summarize it when an API key is set,
+ * and archive it), when a summary is saved (to write the notes file and tell
+ * Slack), when "Sync now" is pressed, and when settings change. Each pass
+ * also archives recordings, removes the server's old copies and finishes
+ * uploads that stopped.
  */
 import pg from "pg";
-import { autoExtract, closeDb, correlateTranscript, extractWithClaude, getDb, publishMeeting } from "@debrief/core";
+import {
+  archivePending,
+  autoExtract,
+  closeDb,
+  correlateTranscript,
+  extractWithClaude,
+  getDb,
+  loadSettings,
+  publishMeeting,
+  pruneLocalCopies,
+  settingNumber,
+} from "@debrief/core";
 import { registerConfiguredCalendars, syncAllCalendars } from "@debrief/core/calendar-sync";
 import { waitForSchema } from "@debrief/core/migrate";
+import { finishAbandonedUploads } from "@debrief/core/uploads";
 
 process.env.DATABASE_URL ||= process.env.POSTGRES_URL;
-const INTERVAL = Number(process.env.POLL_INTERVAL_SECONDS ?? 300) * 1000;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
 await waitForSchema();
 const db = getDb();
+await loadSettings(db);
 await registerConfiguredCalendars(db);
+
+/** Archiving, pruning and abandoned uploads; failures are logged and retried next pass. */
+async function housekeeping() {
+  try {
+    const stale = await finishAbandonedUploads(db);
+    if (stale) log(`Queued ${stale} upload(s) that stopped part-way`);
+    const a = await archivePending(db);
+    if (a.archived) log(`Archived ${a.archived} recording(s)`);
+    for (const e of a.errors) log("Couldn't archive", e);
+    const pruned = await pruneLocalCopies(db);
+    if (pruned) log(`Removed the server's copy of ${pruned} archived recording(s)`);
+  } catch (err) {
+    log("Housekeeping failed:", (err as Error).message);
+  }
+}
 
 let running = false;
 let again = false;
@@ -32,13 +61,23 @@ async function sync(reason: string) {
     log(`Synced (${reason}): ${summary || "no calendars enabled"}; linked ${r.correlation.linked} of ${r.correlation.checked} unmatched transcripts`);
   } catch (err) {
     log("Sync failed:", (err as Error).message);
-  } finally {
-    running = false;
-    if (again) {
-      again = false;
-      void sync("queued");
-    }
   }
+  await housekeeping();
+  running = false;
+  if (again) {
+    again = false;
+    void sync("queued");
+  }
+}
+
+let timer: NodeJS.Timeout | undefined;
+let interval = 0;
+function schedule() {
+  const next = Math.max(30, settingNumber("POLL_INTERVAL_SECONDS")) * 1000;
+  if (next === interval) return;
+  interval = next;
+  clearInterval(timer);
+  timer = setInterval(() => void sync("timer"), interval);
 }
 
 // LISTEN needs its own connection, outside the pool.
@@ -49,11 +88,14 @@ async function listen() {
     setTimeout(listen, 5000);
   });
   await client.connect();
-  await client.query("LISTEN debrief_transcribed");
-  await client.query("LISTEN debrief_sync_now");
-  await client.query("LISTEN debrief_summarized");
+  for (const channel of ["debrief_transcribed", "debrief_sync_now", "debrief_summarized", "debrief_settings"]) await client.query(`LISTEN ${channel}`);
   client.on("notification", async (n) => {
     if (n.channel === "debrief_sync_now") return void sync("requested");
+    if (n.channel === "debrief_settings") {
+      await loadSettings(db).catch((err) => log("Couldn't reload settings:", (err as Error).message));
+      schedule();
+      return void sync("settings changed");
+    }
     if (n.channel === "debrief_transcribed" && n.payload) {
       try {
         const m = await correlateTranscript(db, n.payload);
@@ -69,6 +111,7 @@ async function listen() {
           log("Couldn't summarize:", (err as Error).message);
         }
       }
+      await housekeeping();
     }
     if (n.channel === "debrief_summarized" && n.payload) {
       try {
@@ -80,12 +123,12 @@ async function listen() {
       }
     }
   });
-  log("Listening for new transcripts, summaries and sync requests");
+  log("Listening for new transcripts, summaries, settings and sync requests");
 }
 
 await listen();
 await sync("startup");
-const timer = setInterval(() => void sync("timer"), INTERVAL);
+schedule();
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, async () => {

@@ -115,3 +115,17 @@ test("clock and speaker labels", () => {
   assert.equal(speakerName({}, "SPEAKER_00"), "Speaker 1");
   assert.equal(speakerName({ SPEAKER_01: "Sarah" }, "SPEAKER_01"), "Sarah");
 });
+
+test("S3 links are path-style, presigned and expire", async () => {
+  const { presignedAudioUrl } = await import("../src/storage");
+  const env = { S3_BUCKET: "meetings", S3_ACCESS_KEY_ID: "AKIDEXAMPLE", S3_SECRET_ACCESS_KEY: "secret", S3_ENDPOINT: "https://minio.example.com/", S3_PREFIX: "debrief/" };
+  Object.assign(process.env, env);
+  try {
+    const url = new URL(await presignedAudioUrl("laptop/2026-10-22_10-00-00_aaaaaaaa/audio.opus", 600));
+    assert.equal(url.origin + url.pathname, "https://minio.example.com/meetings/debrief/laptop/2026-10-22_10-00-00_aaaaaaaa/audio.opus");
+    assert.equal(url.searchParams.get("X-Amz-Expires"), "600");
+    assert.ok(url.searchParams.get("X-Amz-Signature"));
+  } finally {
+    for (const k of Object.keys(env)) delete process.env[k];
+  }
+});

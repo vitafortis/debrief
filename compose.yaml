@@ -1,157 +1,84 @@
-# Debrief: Postgres on local disk, the recordings and notes on the
-# NAS (AUDIO_PATH and EXPORTS_PATH, default /mnt/meetings/…), everything else
-# stateless. Copy .env.example to .env and fill it in. Traefik labels assume
-# an external "traefik" network; sign-in is Authentik over OpenID Connect,
-# inside the app.
+# Debrief: the web app, the transcriber, calendar-sync and the MCP server, with Postgres.
+#
+#   1. Put DB_PASSWORD=<something long> in .env (see .env.example).
+#   2. docker compose up -d
+#   3. Open http://<server>:3000 and choose a password. Everything else is in Settings.
+#
+# Optional overlays, added with COMPOSE_FILE in .env:
+#   compose.traefik.yaml  HTTPS through Traefik instead of plain ports
+#   compose.nas.yaml      a NAS folder to archive recordings to, or to watch for them
 name: debrief
 
-# Settings the app's services share.
-x-app-env: &app-env
-  DATABASE_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
-  PUBLIC_URL: https://${DEBRIEF_HOST:-debrief.example.com}
-  TZ: ${TZ:-America/New_York}
-  AKIFLOW_WEBHOOK_URL: ${AKIFLOW_WEBHOOK_URL:-}
-  AKIFLOW_DEFAULT_DURATION: ${AKIFLOW_DEFAULT_DURATION:-30}
-  LINEAR_API_KEY: ${LINEAR_API_KEY:-}
-  LINEAR_TEAM: ${LINEAR_TEAM:-}
-  LINEAR_TEAMS: ${LINEAR_TEAMS:-}
-  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
-  AUTO_EXTRACT: ${AUTO_EXTRACT:-true}
-  SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
-  SLACK_WEBHOOKS: ${SLACK_WEBHOOKS:-}
-  MATCH_THRESHOLD: ${MATCH_THRESHOLD:-0.7}
-  POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
-  OWNER_NAME: ${OWNER_NAME:-}
+# What every Debrief service shares. Anything in .env reaches the services too: a
+# setting there (ANTHROPIC_API_KEY=…) wins over Settings and shows as locked.
+x-app: &app
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-db: &db
+  DATABASE_URL: postgresql://debrief:${DB_PASSWORD:?set DB_PASSWORD in .env}@postgres:5432/debrief
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: debrief
       POSTGRES_USER: debrief
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
-    # Local SSD, never NFS: Postgres' WAL doesn't survive network filesystems.
+    # Local disk, never NFS: Postgres' WAL doesn't survive network filesystems.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U debrief"]
       interval: 10s
       timeout: 3s
       retries: 10
 
-  transcriber:
-    image: ghcr.io/vitafortis/debrief-transcriber:${DEBRIEF_TAG:-latest}
-    restart: unless-stopped
-    # The NAS export's owner, so exports can be written (uid:gid).
-    user: ${MEETINGS_UID:-1000}:${MEETINGS_GID:-1000}
-    volumes:
-      - ${AUDIO_PATH:-/mnt/meetings/audio}:/mnt/meetings/audio
-      - ${EXPORTS_PATH:-/mnt/meetings/exports}:/mnt/meetings/exports
-      - models:/models
-    environment:
-      POSTGRES_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
-      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
-      DEVICE: ${WHISPER_DEVICE:-cpu} # cuda with a GPU; see README, "A GPU later"
-      HF_TOKEN: ${HF_TOKEN:-}
-      DIARIZE: ${DIARIZE:-}
-      COMPUTE_TYPE: ${COMPUTE_TYPE:-}
-      CPU_THREADS: ${CPU_THREADS:-0}
-      LANGUAGE: ${LANGUAGE:-}
-      BEAM_SIZE: ${BEAM_SIZE:-5}
-      SCAN_INTERVAL: ${SCAN_INTERVAL:-30}
-      STABLE_SECONDS: ${STABLE_SECONDS:-60}
-      ABANDON_HOURS: ${ABANDON_HOURS:-12}
-      TZ: ${TZ:-America/New_York}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # Also summarizes new meetings (with ANTHROPIC_API_KEY), writes their notes
-  # to the exports folder, and posts them to Slack.
-  calendar-sync:
-    image: ghcr.io/vitafortis/debrief-calendar-sync:${DEBRIEF_TAG:-latest}
-    restart: unless-stopped
-    user: ${MEETINGS_UID:-1000}:${MEETINGS_GID:-1000}
-    volumes:
-      - ${EXPORTS_PATH:-/mnt/meetings/exports}:/mnt/meetings/exports
-    environment:
-      <<: *app-env
-      POSTGRES_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
-      GOOGLE_CREDENTIALS_FILE: /run/secrets/google-creds.json
-      GOOGLE_CALENDARS: ${GOOGLE_CALENDARS:-}
-      ICS_CALENDARS: ${ICS_CALENDARS:-}
-      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
-      SYNC_DAYS_BACK: ${SYNC_DAYS_BACK:-30}
-      SYNC_DAYS_AHEAD: ${SYNC_DAYS_AHEAD:-14}
-    secrets:
-      - google-creds.json
-    depends_on:
-      postgres:
-        condition: service_healthy
-
+  # The UI, the recorder's upload API and the database migrations.
   web:
+    <<: *app
     image: ghcr.io/vitafortis/debrief-web:${DEBRIEF_TAG:-latest}
-    restart: unless-stopped
-    # Writes what the recorder uploads into the recordings folder, as the NAS's owner.
-    user: ${MEETINGS_UID:-1000}:${MEETINGS_GID:-1000}
+    environment:
+      <<: *db
     volumes:
-      - ${AUDIO_PATH:-/mnt/meetings/audio}:/mnt/meetings/audio
-    environment:
-      <<: *app-env
-      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
-      AUTH_URL: https://${DEBRIEF_HOST:-debrief.example.com}
-      AUTH_OIDC_ISSUER: ${AUTH_OIDC_ISSUER:-}
-      AUTH_OIDC_ID: ${AUTH_OIDC_ID:-}
-      AUTH_OIDC_SECRET: ${AUTH_OIDC_SECRET:-}
-      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
-      DEBRIEF_PASSWORD: ${DEBRIEF_PASSWORD:-}
-      AUTH_MODE: ${AUTH_MODE:-}
-      AUTH_OIDC_NAME: ${AUTH_OIDC_NAME:-Authentik}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # Without Traefik: compose.standalone.yaml publishes port 3000 instead.
-    networks: [default, traefik]
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=traefik
-      - traefik.http.routers.debrief.rule=Host(`${DEBRIEF_HOST:-debrief.example.com}`)
-      - traefik.http.routers.debrief.entrypoints=websecure
-      - traefik.http.routers.debrief.tls=true
-      - traefik.http.services.debrief.loadbalancer.server.port=3000
+      - recordings:/data/recordings
+    ports: ["${WEB_PORT:-3000}:3000"]
 
-  mcp-server:
-    image: ghcr.io/vitafortis/debrief-mcp:${DEBRIEF_TAG:-latest}
-    restart: unless-stopped
+  transcriber:
+    <<: *app
+    image: ghcr.io/vitafortis/debrief-transcriber:${DEBRIEF_TAG:-latest}
     environment:
-      <<: *app-env
-      # Optional: API keys from Settings work too.
-      MCP_TOKEN: ${MCP_TOKEN:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # Without Traefik: compose.standalone.yaml publishes port 3001 (Claude connects to http://<host>:3001/mcp).
-    networks: [default, traefik]
-    # Same host, /mcp: Claude authenticates with an API key (or MCP_TOKEN), so no SSO in front of it.
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=traefik
-      - traefik.http.routers.debrief-mcp.rule=Host(`${DEBRIEF_HOST:-debrief.example.com}`) && PathPrefix(`/mcp`)
-      - traefik.http.routers.debrief-mcp.entrypoints=websecure
-      - traefik.http.routers.debrief-mcp.tls=true
-      - traefik.http.services.debrief-mcp.loadbalancer.server.port=3001
+      <<: *db
+    volumes:
+      - recordings:/data/recordings
+      - models:/models
+
+  # Calendars, summaries, Slack, and archiving recordings once they're transcribed.
+  calendar-sync:
+    <<: *app
+    image: ghcr.io/vitafortis/debrief-calendar-sync:${DEBRIEF_TAG:-latest}
+    environment:
+      <<: *db
+    volumes:
+      - recordings:/data/recordings
+
+  # Claude connects to http://<server>:3001/mcp with an API key from Settings.
+  mcp-server:
+    <<: *app
+    image: ghcr.io/vitafortis/debrief-mcp:${DEBRIEF_TAG:-latest}
+    environment:
+      <<: *db
+    ports: ["${MCP_PORT:-3001}:3001"]
 
 volumes:
   pgdata:
+  # Recordings while they upload and transcribe, and for KEEP_LOCAL_DAYS after they're archived.
+  recordings:
+  # The Whisper and speaker-label models (about 4 GB), downloaded on first use.
   models:
-
-networks:
-  traefik:
-    external: true
-
-secrets:
-  # Leave the file empty if you only use ICS feeds.
-  google-creds.json:
-    file: ./secrets/google-creds.json

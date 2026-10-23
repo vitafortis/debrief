@@ -1,17 +1,18 @@
 /**
- * Recordings streamed up by the desktop recorder. Each lands in the
- * recordings folder the same way a synced Meetily one does
- * (<device>/<start>_<id>/audio.opus beside a metadata.json that says
- * "recording" until it's done), so the transcriber needs nothing new.
+ * Recordings streamed up by the desktop recorder, into the server's
+ * recordings volume as <device>/<start>_<id>/audio.opus. Once every byte is
+ * there, the recording is queued for the transcriber straight away.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "./db";
 import { devices, recordings, transcripts, uploads } from "./schema";
+import { settingNumber, timeZone } from "./settings";
+import { recordingsDir } from "./storage";
 
 export const AUDIO_TYPES = ["opus", "ogg", "m4a", "mp4", "wav", "flac", "mp3", "webm"] as const;
 export const MAX_CHUNK = 32 * 1024 * 1024;
@@ -41,8 +42,6 @@ export class UploadError extends Error {
   }
 }
 
-export const audioRoot = () => path.resolve(/*turbopackIgnore: true*/ process.env.AUDIO_DIR ?? "/mnt/meetings/audio");
-
 /** "Alex's MacBook Pro" -> "alexs-macbook-pro": the folder (and device) name. */
 export function deviceSlug(name: string) {
   const s = name
@@ -59,7 +58,7 @@ export function deviceSlug(name: string) {
 function folderStamp(d: Date) {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
-      timeZone: process.env.TZ || undefined,
+      timeZone: timeZone(),
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -88,26 +87,12 @@ async function sizeOf(file: string) {
   }
 }
 
-async function writeSidecar(dir: string, u: typeof uploads.$inferSelect) {
-  const meta = {
-    status: u.status,
-    created_at: u.startedAt.toISOString(),
-    meeting_name: u.title || null,
-    duration_seconds: u.durationSecs ?? null,
-    device: u.device,
-    app: u.app,
-    source: "debrief-recorder",
-  };
-  const tmp = path.join(dir, ".metadata.json.tmp");
-  await fs.promises.writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(meta, null, 2));
-  await fs.promises.rename(/*turbopackIgnore: true*/ tmp, path.join(dir, "metadata.json"));
-}
-
 /** Where an upload is at, and its transcript once there is one. */
-export async function uploadStatus(db: Db, id: string, root = audioRoot()) {
+export async function uploadStatus(db: Db, id: string, root = recordingsDir()) {
   const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
   if (!u) return null;
-  const offset = await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
+  // A finished upload may since have moved to the archive.
+  const offset = u.status === "completed" ? u.bytes : await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
   const [rec] = await db
     .select({ status: recordings.status, transcriptId: transcripts.id })
     .from(recordings)
@@ -117,7 +102,7 @@ export async function uploadStatus(db: Db, id: string, root = audioRoot()) {
 }
 
 /** Starts an upload, or picks up the one with this id (the recorder retries freely). */
-export async function startUpload(db: Db, id: string, input: UploadStart, apiKeyId: string | null, root = audioRoot()) {
+export async function startUpload(db: Db, id: string, input: UploadStart, apiKeyId: string | null, root = recordingsDir()) {
   const i = uploadStart.parse(input);
   const device = deviceSlug(i.device);
   const startedAt = new Date(i.startedAt);
@@ -133,7 +118,6 @@ export async function startUpload(db: Db, id: string, input: UploadStart, apiKey
     .onConflictDoUpdate({ target: devices.name, set: { lastSeenAt: new Date() } });
   const dir = resolveInRoot(root, u.folder);
   await fs.promises.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
-  if (u.status === "recording") await writeSidecar(dir, u);
   return uploadStatus(db, id, root);
 }
 
@@ -150,7 +134,7 @@ function serialized<T>(id: string, fn: () => Promise<T>) {
  * Appends bytes at `offset`. When the offset isn't where the file ends (a
  * retried or lost chunk), nothing is written and the real end comes back.
  */
-export function appendUpload(db: Db, id: string, offset: number, body: ReadableStream<Uint8Array> | Readable, length: number | null, root = audioRoot()) {
+export function appendUpload(db: Db, id: string, offset: number, body: ReadableStream<Uint8Array> | Readable, length: number | null, root = recordingsDir()) {
   return serialized(id, async () => {
     const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
     if (!u) throw new UploadError("No such upload. Start it first.", 404);
@@ -182,23 +166,53 @@ export function appendUpload(db: Db, id: string, offset: number, body: ReadableS
   });
 }
 
-/** Marks the recording done once every byte is here; the transcriber picks it up from there. */
-export function finishUpload(db: Db, id: string, input: z.infer<typeof uploadFinish>, root = audioRoot()) {
+/** Queues a finished upload for the transcriber (once; finishing again changes nothing). */
+async function queueRecording(db: Db, u: typeof uploads.$inferSelect) {
+  const [rec] = await db
+    .insert(recordings)
+    .values({
+      filePath: `${u.folder}/${u.fileName}`,
+      fileSize: u.bytes,
+      durationSecs: u.durationSecs ? Math.round(u.durationSecs) : null,
+      recordedAt: u.startedAt,
+      device: u.device,
+      titleHint: u.title,
+      status: "pending",
+      storage: "local",
+    })
+    .onConflictDoNothing({ target: recordings.filePath })
+    .returning({ id: recordings.id });
+  if (rec) await db.execute(sql`select pg_notify('debrief_recording', ${rec.id})`);
+}
+
+/** Marks the upload done once every byte is here, and queues it for the transcriber. */
+export function finishUpload(db: Db, id: string, input: z.infer<typeof uploadFinish>, root = recordingsDir()) {
   return serialized(id, async () => {
     const i = uploadFinish.parse(input);
     const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
     if (!u) throw new UploadError("No such upload.", 404);
-    const dir = resolveInRoot(root, u.folder);
-    const size = await sizeOf(path.join(dir, u.fileName));
-    if (size !== i.bytes) throw new UploadError(`Have ${size} of ${i.bytes} bytes.`, 409, size);
     if (u.status !== "completed") {
+      const size = await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
+      if (size !== i.bytes) throw new UploadError(`Have ${size} of ${i.bytes} bytes.`, 409, size);
       const [done] = await db
         .update(uploads)
         .set({ status: "completed", bytes: size, durationSecs: i.durationSecs, title: i.title || u.title, updatedAt: new Date() })
         .where(eq(uploads.id, id))
         .returning();
-      await writeSidecar(dir, done);
-    }
+      await queueRecording(db, done);
+    } else if (u.bytes !== i.bytes) throw new UploadError(`Have ${u.bytes} of ${i.bytes} bytes.`, 409, u.bytes);
     return uploadStatus(db, id, root);
   });
+}
+
+/** Uploads that stopped (the laptop died or the app was killed) are transcribed as far as they got, after ABANDON_HOURS. */
+export async function finishAbandonedUploads(db: Db, now = new Date()) {
+  const cutoff = new Date(now.getTime() - settingNumber("ABANDON_HOURS") * 3600_000);
+  const stale = await db
+    .update(uploads)
+    .set({ status: "completed", updatedAt: now })
+    .where(and(eq(uploads.status, "recording"), lt(uploads.updatedAt, cutoff), gt(uploads.bytes, 0)))
+    .returning();
+  for (const u of stale) await queueRecording(db, u);
+  return stale.length;
 }

@@ -97,7 +97,7 @@ export function CalendarSettings({ calendars }: { calendars: Cal[] }) {
         <div>
           <h2 className="text-sm font-semibold">Calendars</h2>
           <p className="text-xs text-muted-foreground">
-            Each has a context (acme, lumen) that filters the app and routes its meetings&apos; tasks.
+            Each has a context, a short word like work or side, that filters the app and routes its meetings&apos; tasks.
           </p>
         </div>
         <div className="flex gap-2">
@@ -152,7 +152,7 @@ export function CalendarSettings({ calendars }: { calendars: Cal[] }) {
             <label className="label" htmlFor="cal-ctx">
               Context
             </label>
-            <input id="cal-ctx" className="input h-8 text-xs" placeholder="acme" value={draft.context} onChange={(e) => setDraft({ ...draft, context: e.target.value })} required />
+            <input id="cal-ctx" className="input h-8 text-xs" placeholder="work" value={draft.context} onChange={(e) => setDraft({ ...draft, context: e.target.value })} required />
           </div>
           <button className="btn btn-primary btn-sm" disabled={pending}>
             Add calendar
@@ -178,7 +178,7 @@ export function CalendarSettings({ calendars }: { calendars: Cal[] }) {
         </div>
       ) : (
         <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-          No calendars yet. Add one here, or set GOOGLE_CALENDARS / ICS_CALENDARS on calendar-sync.
+          No calendars yet. Add a Google calendar or an ICS feed.
         </p>
       )}
     </section>

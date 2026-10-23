@@ -9,10 +9,11 @@ import { closeDb, getDb } from "../src/db";
 import { runMigrations } from "../src/migrate";
 import { calendarEvents, calendars, eventAttendees, recordings, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
 import { correlateTranscript } from "../src/correlate";
+import { saveSettings } from "../src/settings";
 
 const db = getDb();
 await runMigrations();
-await db.execute(sql`truncate calendars, calendar_events, event_attendees, recordings, transcripts, transcript_events, tasks cascade`);
+await db.execute(sql`truncate calendars, calendar_events, event_attendees, recordings, transcripts, transcript_events, tasks, devices, uploads, api_keys, settings cascade`);
 
 const TZ = process.env.TZ || "America/Chicago";
 // Wall-clock time in TZ, `dayOffset` days from today.
@@ -272,4 +273,7 @@ await db.insert(tasks).values([
 
 const linked = await db.select({ n: sql<number>`count(*)::int` }).from(transcriptEvents);
 console.log(`Demo data ready: ${linked[0].n} transcripts linked to events.`);
+// What the owner would have set in Settings (the environment still wins, as in the e2e tests).
+await saveSettings(db, { OWNER_NAME: "Alex", TZ, PUBLIC_URL: "https://debrief.example.com", WHISPER_MODEL: "large-v3" });
+
 await closeDb();

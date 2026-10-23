@@ -1,6 +1,7 @@
 /**
  * What happens once a meeting has its summary: a Markdown copy (summary,
- * action items, transcript) goes to the exports folder on the NAS, and a
+ * action items, transcript) goes to the exports folder on the NAS (if one is
+ * mounted), and a
  * message to Slack. calendar-sync does both, woken by debrief_summarized.
  */
 import fs from "node:fs";
@@ -10,15 +11,17 @@ import type { Db } from "./db";
 import { clock, speakerName } from "./extract";
 import { getMeeting, type Meeting } from "./meetings";
 import { transcripts } from "./schema";
+import { publicUrl, setting, timeZone } from "./settings";
+import { exportsDir } from "./storage";
 
-const tz = () => process.env.TZ || "UTC";
+const tz = timeZone;
 const when = (d: Date) =>
   d.toLocaleString("en-US", { timeZone: tz(), weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const isoDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 const minutes = (s: number | null) => (s ? `${Math.max(1, Math.round(s / 60))} min` : null);
 const DEST = { akiflow: "Akiflow", linear: "Linear" } as const;
 
-export const meetingUrl = (id: string) => (process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL.replace(/\/$/, "")}/meetings/${id}` : null);
+export const meetingUrl = (id: string) => (publicUrl() ? `${publicUrl()}/meetings/${id}` : null);
 
 /** The meeting as Markdown: when, who, summary, action items and the transcript. */
 export function meetingMarkdown(m: Meeting) {
@@ -54,7 +57,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 
 /** Writes <EXPORT_DIR>/<day>/<title>-<id>.notes.md, beside the transcriber's .txt and .json. Returns the path, or null when exports are off. */
 export async function writeMeetingNotes(m: Meeting) {
-  const root = process.env.EXPORT_DIR ?? "/mnt/meetings/exports";
+  const root = exportsDir();
   if (!root) return null;
   const dir = path.join(root, isoDay(m.recording.recordedAt));
   const tag = m.recording.id.slice(0, 8);
@@ -71,7 +74,7 @@ export async function writeMeetingNotes(m: Meeting) {
 /** The Slack incoming webhook for a context: SLACK_WEBHOOKS="acme:https://hooks…,lumen:https://hooks…", else SLACK_WEBHOOK_URL. */
 export function slackWebhookFor(context: string | null) {
   const map = Object.fromEntries(
-    (process.env.SLACK_WEBHOOKS ?? "")
+    setting("SLACK_WEBHOOKS")
       .split(",")
       .map((p) => p.trim())
       .filter(Boolean)
@@ -80,10 +83,10 @@ export function slackWebhookFor(context: string | null) {
         return [p.slice(0, i).trim(), p.slice(i + 1).trim()];
       })
   );
-  return (context && map[context]) || process.env.SLACK_WEBHOOK_URL || null;
+  return (context && map[context]) || setting("SLACK_WEBHOOK_URL") || null;
 }
 
-export const slackConfigured = () => !!(process.env.SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOKS);
+export const slackConfigured = () => !!(setting("SLACK_WEBHOOK_URL") || setting("SLACK_WEBHOOKS"));
 
 // Slack's mrkdwn: escape the three characters it treats as markup.
 const esc = (s: string) => s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

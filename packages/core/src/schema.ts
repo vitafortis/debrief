@@ -24,6 +24,9 @@ export type SpeakerSegment = { speaker: string | null; start: number; end: numbe
 export const RECORDING_STATUSES = ["pending", "processing", "done", "error"] as const;
 export type RecordingStatus = (typeof RECORDING_STATUSES)[number];
 
+export const RECORDING_STORAGE = ["local", "folder", "s3"] as const;
+export type RecordingStorage = (typeof RECORDING_STORAGE)[number];
+
 export const TASK_STATUSES = ["pending", "approved", "pushed", "dismissed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const TASK_DESTINATIONS = ["akiflow", "linear"] as const;
@@ -91,7 +94,7 @@ export const eventAttendees = pgTable(
   (t) => [uniqueIndex("event_attendees_event_email").on(t.eventId, t.email)]
 );
 
-/** Audio files found under the recordings folder. The transcriber owns these rows. */
+/** Recordings: uploaded by the recorder, or found in the watched NAS folder by the transcriber. */
 export const recordings = pgTable(
   "recordings",
   {
@@ -105,6 +108,10 @@ export const recordings = pgTable(
     // Peak levels (0–1) across the recording, so the player draws the waveform without downloading the file.
     waveform: jsonb("waveform").$type<number[]>(),
     status: text("status").$type<RecordingStatus>().notNull().default("pending"),
+    // Where the file lives: the server's recordings volume, the NAS folder, or S3.
+    // The server may still have a copy of an archived one for a while (KEEP_LOCAL_DAYS).
+    storage: text("storage").$type<RecordingStorage>().notNull().default("folder"),
+    archivedAt: ts("archived_at"),
     progress: real("progress"), // 0–1 while processing
     error: text("error"),
     createdAt: ts("created_at").notNull().defaultNow(),
@@ -213,11 +220,11 @@ export const apiKeys = pgTable("api_keys", {
 export const UPLOAD_STATUSES = ["recording", "completed"] as const;
 export type UploadStatus = (typeof UPLOAD_STATUSES)[number];
 
-/** A recording the desktop recorder is streaming up, written beside the synced ones. */
+/** A recording the desktop recorder is streaming up, into the server's recordings volume. */
 export const uploads = pgTable("uploads", {
   id: uuid("id").primaryKey(), // chosen by the recorder, so retries land on the same upload
   device: text("device").notNull(),
-  folder: text("folder").notNull().unique(), // relative to the recordings root
+  folder: text("folder").notNull().unique(), // relative to the recordings volume (and the archive)
   fileName: text("file_name").notNull(),
   bytes: bigint("bytes", { mode: "number" }).notNull().default(0),
   startedAt: ts("started_at").notNull(),
@@ -227,5 +234,12 @@ export const uploads = pgTable("uploads", {
   durationSecs: real("duration_secs"),
   apiKeyId: uuid("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
   createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+/** Settings made in the web app (see settings.ts). An environment variable of the same name wins. */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });

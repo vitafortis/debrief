@@ -1,7 +1,7 @@
 [project]
 name = "debrief-transcriber"
 version = "0.1.0"
-description = "Watches the recordings folder and transcribes new meetings with faster-whisper."
+description = "Transcribes Debrief recordings with faster-whisper, and optionally watches a NAS folder for more."
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [

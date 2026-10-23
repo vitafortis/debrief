@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { eq } from "drizzle-orm";
 import { recordings } from "@debrief/core/schema";
+import { locateAudio, presignedAudioUrl } from "@debrief/core/storage";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -20,23 +21,23 @@ const TYPES: Record<string, string> = {
   ".aif": "audio/aiff",
 };
 
-/** Streams a recording from the NAS mount, with Range support so the player can seek. */
+/** Streams a recording from the server or the NAS, with Range support so the player can seek; S3 recordings redirect to a short-lived link. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   await requireViewer();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
-  const [rec] = await db().select({ filePath: recordings.filePath }).from(recordings).where(eq(recordings.id, id));
+  const [rec] = await db().select({ filePath: recordings.filePath, storage: recordings.storage }).from(recordings).where(eq(recordings.id, id));
   if (!rec) return new Response("Not found", { status: 404 });
 
-  const root = path.resolve(/*turbopackIgnore: true*/ process.env.AUDIO_DIR ?? "/mnt/meetings/audio");
-  const file = path.resolve(root, rec.filePath);
-  if (!file.startsWith(root + path.sep)) return new Response("Not found", { status: 404 });
-  let size: number;
+  let found;
   try {
-    size = (await fs.promises.stat(/*turbopackIgnore: true*/ file)).size;
+    found = await locateAudio(rec);
   } catch {
-    return new Response("The recording isn't in the recordings folder any more.", { status: 404 });
+    found = null;
   }
+  if (!found) return new Response("The recording isn't on the server or in the archive any more.", { status: 404 });
+  if (found.kind === "s3") return Response.redirect(await presignedAudioUrl(found.key), 302);
+  const { path: file, size } = found;
 
   const headers = new Headers({
     "content-type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",

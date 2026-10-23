@@ -12,7 +12,7 @@ import {
   type RecordingStatus,
   type TaskDestination,
 } from "./schema";
-import { overlapScore, MATCH_THRESHOLD } from "./correlate";
+import { overlapScore, matchThreshold } from "./correlate";
 
 /** What a meeting is called: a title set by hand, its calendar event's, the recorder's, or the date. */
 export function meetingTitle(m: { title?: string | null; eventTitle?: string | null; titleHint?: string | null; recordedAt: Date }) {
@@ -198,7 +198,7 @@ export async function listEventsWithStatus(db: Db, from: Date, to: Date, context
       const rec = unfinished.find((r) => {
         // Duration isn't known until it's read: assume it covers the meeting.
         const end = r.durationSecs ? new Date(r.recordedAt.getTime() + r.durationSecs * 1000) : e.endAt;
-        return overlapScore({ start: r.recordedAt, end }, { start: e.startAt, end: e.endAt }) >= MATCH_THRESHOLD;
+        return overlapScore({ start: r.recordedAt, end }, { start: e.startAt, end: e.endAt }) >= matchThreshold();
       });
       if (rec) status = rec.status;
     }

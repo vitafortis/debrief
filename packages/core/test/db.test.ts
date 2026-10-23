@@ -18,7 +18,7 @@ before(async () => {
   if (!core) return;
   await runMigrations();
   const db = core.getDb();
-  await db.execute(sql`truncate calendars, recordings, devices, uploads, api_keys cascade`);
+  await db.execute(sql`truncate calendars, recordings, devices, uploads, api_keys, settings cascade`);
   const [cal] = await db.insert(core.calendars).values({ source: "ics", externalId: "https://x.example/a.ics", name: "Work", context: "acme" }).returning();
   calendarId = cal.id;
   const [rec] = await db
@@ -114,7 +114,7 @@ test("an API key works until it's deleted, and only its hash is kept", { skip },
   assert.equal(await core!.verifyApiKey(db, k.key), null);
 });
 
-test("an upload resumes at the right offset and finishes as a Meetily-style folder", { skip }, async () => {
+test("an upload resumes at the right offset and is queued for the transcriber when it finishes", { skip }, async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
   const path = await import("node:path");
@@ -137,17 +137,120 @@ test("an upload resumes at the right offset and finishes as a Meetily-style fold
   await assert.rejects(up.finishUpload(db, id, { bytes: 99, durationSecs: 60 }, root), (e: InstanceType<typeof up.UploadError>) => e.status === 409);
   const done = await up.finishUpload(db, id, { bytes: 11, durationSecs: 60, title: "Pricing sync" }, root);
   assert.equal(done!.status, "completed");
+  assert.equal(done!.recording, "pending");
+  // Finishing again (a retry) changes nothing.
+  assert.equal((await up.finishUpload(db, id, { bytes: 11, durationSecs: 60 }, root))!.offset, 11);
 
   const [u] = await db.select().from(core!.uploads).where(sql`id = ${id}`);
   assert.equal(u.device, "alexs-macbook-pro");
   assert.match(u.folder, /^alexs-macbook-pro\/2026-10-22_\d\d-00-00_3b8f1c2a$/);
   assert.equal(fs.readFileSync(path.join(root, u.folder, "audio.opus"), "utf8"), "hello world");
-  const meta = JSON.parse(fs.readFileSync(path.join(root, u.folder, "metadata.json"), "utf8"));
-  assert.deepEqual([meta.status, meta.created_at, meta.meeting_name, meta.duration_seconds], ["completed", "2026-10-22T18:00:00.000Z", "Pricing sync", 60]);
+  const [rec] = await db.select().from(core!.recordings).where(sql`file_path = ${`${u.folder}/audio.opus`}`);
+  assert.deepEqual([rec.storage, rec.status, rec.titleHint, rec.durationSecs, rec.device], ["local", "pending", "Pricing sync", 60, "alexs-macbook-pro"]);
+  assert.equal(rec.recordedAt.toISOString(), "2026-10-22T18:00:00.000Z");
   // The device shows up, untagged.
   const dev = (await core!.listDevices(db)).find((d) => d.name === "alexs-macbook-pro");
   assert.equal(dev?.context, null);
   fs.rmSync(root, { recursive: true });
+});
+
+test("an upload that stops part-way is queued after ABANDON_HOURS", { skip }, async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { Readable } = await import("node:stream");
+  const up = await import("../src/uploads");
+  const db = core!.getDb();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-up-"));
+  const id = "3b8f1c2a-0000-4000-8000-000000000002";
+  await up.startUpload(db, id, { device: "home-pc", startedAt: "2026-10-22T20:00:00Z", format: "opus" }, null, root);
+  await up.appendUpload(db, id, 0, Readable.from([Buffer.from("partial")]), 7, root);
+  assert.equal(await up.finishAbandonedUploads(db), 0);
+  assert.equal(await up.finishAbandonedUploads(db, new Date(Date.now() + 13 * 3600_000)), 1);
+  const [rec] = await db.select().from(core!.recordings).where(sql`file_path like ${"home-pc/%"}`);
+  assert.deepEqual([rec.status, rec.storage], ["pending", "local"]);
+  await db.execute(sql`delete from recordings where id = ${rec.id}`);
+  fs.rmSync(root, { recursive: true });
+});
+
+test("settings: saved values apply, the environment wins, secrets aren't shown", { skip }, async () => {
+  const s = await import("../src/settings");
+  const db = core!.getDb();
+  await s.saveSettings(db, { ANTHROPIC_MODEL: "claude-test", SLACK_WEBHOOK_URL: "https://hooks.slack.com/x" });
+  assert.equal(s.setting("ANTHROPIC_MODEL"), "claude-test");
+  assert.equal(s.settingSource("ANTHROPIC_MODEL"), "saved");
+  assert.equal(s.setting("WHISPER_MODEL"), "large-v3");
+  assert.equal(s.settingSource("WHISPER_MODEL"), "default");
+  const shown = s.settingForDisplay(s.settingDef("SLACK_WEBHOOK_URL")!);
+  assert.deepEqual([shown.value, shown.isSet], ["", true]);
+  process.env.ANTHROPIC_MODEL = "from-env";
+  try {
+    assert.equal(s.setting("ANTHROPIC_MODEL"), "from-env");
+    assert.equal(s.settingSource("ANTHROPIC_MODEL"), "env");
+  } finally {
+    delete process.env.ANTHROPIC_MODEL;
+  }
+  await s.saveSettings(db, { ANTHROPIC_MODEL: null, SLACK_WEBHOOK_URL: "" });
+  assert.equal(s.setting("ANTHROPIC_MODEL"), "claude-sonnet-5-5");
+  await assert.rejects(s.saveSettings(db, { NOT_A_SETTING: "x" }));
+
+  assert.equal(s.ownerPasswordSet(), false);
+  await assert.rejects(s.setOwnerPassword(db, "short"));
+  await s.setOwnerPassword(db, "correct horse");
+  assert.ok(s.verifyOwnerPassword("correct horse"));
+  assert.ok(!s.verifyOwnerPassword("wrong horse"));
+  assert.notEqual(s.setting("PASSWORD_HASH"), "correct horse");
+  const secret = await s.ensureAuthSecret(db);
+  assert.equal(await s.ensureAuthSecret(db), secret);
+  await db.execute(sql`delete from settings`);
+  await s.loadSettings(db);
+});
+
+test("archiving to the NAS folder copies, records and later prunes the server's copy", { skip }, async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const s = await import("../src/settings");
+  const st = await import("../src/storage");
+  const db = core!.getDb();
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-local-"));
+  const nas = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-nas-"));
+  process.env.RECORDINGS_DIR = local;
+  process.env.AUDIO_DIR = nas;
+  try {
+    const rel = "laptop/2026-10-22_10-00-00_aaaaaaaa/audio.opus";
+    fs.mkdirSync(path.dirname(path.join(local, rel)), { recursive: true });
+    fs.writeFileSync(path.join(local, rel), "opus bytes");
+    const [rec] = await db
+      .insert(core!.recordings)
+      .values({ filePath: rel, recordedAt: new Date("2026-10-22T14:00:00Z"), status: "done", storage: "local", titleHint: "Standup" })
+      .returning();
+    // Off: nothing moves.
+    assert.deepEqual(await st.archivePending(db), { archived: 0, errors: [] });
+
+    await s.saveSettings(db, { ARCHIVE: "folder", KEEP_LOCAL_DAYS: "7" });
+    assert.match(await st.testArchive(), /Wrote to/);
+    assert.equal((await st.archivePending(db)).archived, 1);
+    assert.equal(fs.readFileSync(path.join(nas, rel), "utf8"), "opus bytes");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(nas, path.dirname(rel), "metadata.json"), "utf8")).meeting_name, "Standup");
+    const [after] = await db.select().from(core!.recordings).where(sql`id = ${rec.id}`);
+    assert.equal(after.storage, "folder");
+    // Played from the server while it still has a copy, then from the NAS.
+    const playedFrom = async () => ((await st.locateAudio(after)) as { path: string }).path;
+    assert.equal(await playedFrom(), path.join(local, rel));
+    assert.equal(await st.pruneLocalCopies(db), 0);
+    assert.equal(await st.pruneLocalCopies(db, new Date(Date.now() + 8 * 86400_000)), 1);
+    assert.ok(!fs.existsSync(path.join(local, "laptop")));
+    assert.equal(await playedFrom(), path.join(nas, rel));
+    await db.execute(sql`delete from recordings where id = ${rec.id}`);
+  } finally {
+    delete process.env.RECORDINGS_DIR;
+    delete process.env.AUDIO_DIR;
+    await db.execute(sql`delete from settings`);
+    await s.loadSettings(db);
+    fs.rmSync(local, { recursive: true, force: true });
+    fs.rmSync(nas, { recursive: true, force: true });
+  }
 });
 
 test("a device's context applies only once set, and a calendar event wins over it", { skip }, async () => {

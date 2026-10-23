@@ -59,7 +59,7 @@
 			<div class="section-head">
 				<div class="kicker">What it does</div>
 				<h2>From the call to your task list, on your own hardware.</h2>
-				<p>The recorder on your Mac or PC picks up the call. Debrief transcribes it, matches it to the calendar event, has Claude write the summary and pull out the action items, and keeps the full audio on your NAS.</p>
+				<p>The recorder on your Mac or PC picks up the call. Debrief transcribes it, matches it to the calendar event, has Claude write the summary and pull out the action items, and keeps the full audio on your server, your NAS or S3.</p>
 			</div>
 			<div class="grid grid-3">
 				<div class="card">
@@ -137,7 +137,7 @@
 						<img class="shot-dark" src="screenshots/settings.png" width="2880" height="1800" loading="lazy" alt="Settings">
 						<img class="shot-light" src="screenshots/settings-light.png" width="2880" height="1800" loading="lazy" alt="Settings">
 					</div>
-					<figcaption><strong>Settings.</strong> Calendars and their contexts, devices, API keys for recorders and Claude, and the state of every service.</figcaption>
+					<figcaption><strong>Settings.</strong> Sign-in, calendars, storage, transcription, Claude, Slack and tasks, all set in the app. A value in .env wins and shows a lock.</figcaption>
 				</figure>
 				<figure class="shot">
 					<div class="frame">
@@ -179,14 +179,14 @@
 		<div class="wrap">
 			<div class="section-head">
 				<div class="kicker">How it works</div>
-				<h2>Five containers and a share on your NAS.</h2>
-				<p>Postgres, the transcriber, calendar-sync, the web app and an MCP server run with Docker Compose. The recordings and notes live on the NAS.</p>
+				<h2>Five containers, set up from the browser.</h2>
+				<p>Postgres, the transcriber, calendar-sync, the web app and an MCP server run with Docker Compose. Everything else, from sign-in to where recordings are archived, is set in the app.</p>
 			</div>
 			<ol class="steps">
 				<li class="card"><h3>Record</h3><p>The recorder (or Meetily, or any audio file synced to the NAS) captures the call and streams it to Debrief.</p></li>
-				<li class="card"><h3>Transcribe</h3><p>The transcriber picks up finished recordings and runs faster-whisper, with optional speaker labels.</p></li>
+				<li class="card"><h3>Transcribe</h3><p>The transcriber starts as soon as the upload finishes and runs faster-whisper, with optional speaker labels.</p></li>
 				<li class="card"><h3>Match and summarize</h3><p>calendar-sync links the transcript to its event, has Claude summarize it, and posts it to Slack.</p></li>
-				<li class="card"><h3>Follow up</h3><p>You review the action items and send them to Akiflow or Linear, or ask Claude through MCP.</p></li>
+				<li class="card"><h3>Follow up</h3><p>You review the action items and send them to Akiflow or Linear. The recording is archived to your NAS or S3.</p></li>
 			</ol>
 		</div>
 	</section>
@@ -196,14 +196,13 @@
 			<div class="section-head">
 				<div class="kicker">Get started</div>
 				<h2>Up in a few minutes.</h2>
-				<p>You need Docker with Compose v2 and a folder on your NAS mounted on the server. The guide covers sign-in, calendars, speaker labels and the recorder.</p>
+				<p>You need a server with Docker. Set a database password, start it, and finish in the browser. The guide covers HTTPS, calendars, archiving and the recorder.</p>
 			</div>
-			<pre class="term" style="text-align:left;max-width:44rem;margin:0 auto 2rem"><code>mkdir -p ~/debrief/secrets && cd ~/debrief
+			<pre class="term" style="text-align:left;max-width:44rem;margin:0 auto 2rem"><code>mkdir -p ~/debrief && cd ~/debrief
 curl -fsSLO https://raw.githubusercontent.com/vitafortis/debrief/main/compose.yaml
-curl -fsSL -o .env https://raw.githubusercontent.com/vitafortis/debrief/main/.env.example
-touch secrets/google-creds.json
-<span class="c"># fill in .env, then</span>
-docker compose up -d</code></pre>
+echo "DB_PASSWORD=$(openssl rand -hex 16)" > .env
+docker compose up -d
+<span class="c"># then open http://&lt;server&gt;:3000 and choose a password</span></code></pre>
 			<a class="btn btn-primary" href="docs.html#getting-started">Read the setup guide</a>
 		</div>
 	</section>

@@ -1,8 +1,10 @@
-"""The transcription worker: scan the recordings folder, transcribe what's new, store it.
+"""The transcription worker: transcribe queued recordings, store them, and optionally watch the NAS folder.
 
-The folder is scanned on a timer rather than watched: inotify sees nothing
-written to an NFS export by another machine (the NAS), so events would miss
-every recording synced from a laptop.
+Recordings are queued by the web app when an upload finishes (with
+pg_notify('debrief_recording')), or found here by scanning the NAS folder
+when watching is on. The folder is scanned on a timer rather than watched:
+inotify sees nothing written to an NFS export by another machine (the NAS),
+so events would miss every recording synced from a laptop.
 """
 
 from __future__ import annotations
@@ -20,12 +22,13 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
-from .config import Config
+from .config import Config, database_url
 from .files import Found, device_for, local_tz, meeting_name, read_sidecar, recorded_at, walk_audio
 from .transcribe import Transcriber
 
 log = logging.getLogger("debrief")
 stop = threading.Event()
+CHANNELS = ("debrief_recording", "debrief_settings")
 
 
 def probe_duration(path: Path) -> float | None:
@@ -43,11 +46,13 @@ def probe_duration(path: Path) -> float | None:
     return None
 
 
-def connect(cfg: Config) -> psycopg.Connection:
+def connect(url: str) -> psycopg.Connection:
     for attempt in range(1, 61):
         try:
-            conn = psycopg.connect(cfg.database_url, autocommit=True)
-            conn.execute("select 1 from recordings limit 1")
+            conn = psycopg.connect(url, autocommit=True)
+            conn.execute("select 1 from settings limit 1")
+            for ch in CHANNELS:
+                conn.execute(f"LISTEN {ch}")
             return conn
         except psycopg.Error as err:
             if attempt == 1:
@@ -57,46 +62,60 @@ def connect(cfg: Config) -> psycopg.Connection:
     raise SystemExit("The database never became ready.")
 
 
-class Scanner:
-    """Registers finished audio files as pending recordings."""
+def load_config(conn: psycopg.Connection) -> Config:
+    return Config.build(dict(conn.execute("select key, value from settings").fetchall()))
 
-    def __init__(self, cfg: Config, conn: psycopg.Connection):
-        self.cfg = cfg
+
+def wait(conn: psycopg.Connection, seconds: float) -> None:
+    """Sleeps until a recording is queued, settings change, or `seconds` pass."""
+    deadline = time.monotonic() + seconds
+    while not stop.is_set() and (left := deadline - time.monotonic()) > 0:
+        # Short slices, so a stop signal isn't kept waiting.
+        for _ in conn.notifies(timeout=min(left, 2.0), stop_after=1):
+            return
+
+
+class Scanner:
+    """Registers finished audio files in the watched NAS folder as pending recordings."""
+
+    def __init__(self, conn: psycopg.Connection):
         self.conn = conn
-        self.tz = local_tz()
         self.seen_sizes: dict[str, int] = {}
 
-    def ready(self, f: Found) -> tuple[bool, object]:
+    def ready(self, cfg: Config, f: Found) -> tuple[bool, object]:
         meta = read_sidecar(f.path)
         if meta is not None:
             # A recorder that died mid-meeting never says "completed": transcribe what arrived.
-            abandoned = not meta.finished and time.time() - f.mtime >= self.cfg.abandon_hours * 3600
+            abandoned = not meta.finished and time.time() - f.mtime >= cfg.abandon_hours * 3600
             if abandoned:
-                log.warning("%s still says it's recording but hasn't changed in %g h; transcribing what's there", f.rel, self.cfg.abandon_hours)
+                log.warning("%s still says it's recording but hasn't changed in %g h; transcribing what's there", f.rel, cfg.abandon_hours)
             return meta.finished or abandoned, meta
         # No sidecar: wait until the file has stopped growing.
-        stable = self.seen_sizes.get(f.rel) == f.size and time.time() - f.mtime >= self.cfg.stable_seconds
+        stable = self.seen_sizes.get(f.rel) == f.size and time.time() - f.mtime >= cfg.stable_seconds
         self.seen_sizes[f.rel] = f.size
         return stable, None
 
-    def scan(self) -> int:
-        if not self.cfg.audio_dir.is_dir():
-            log.warning("The recordings folder %s isn't there (is the NAS mounted?)", self.cfg.audio_dir)
+    def scan(self, cfg: Config) -> int:
+        if not cfg.watch or cfg.audio_dir is None:
+            return 0
+        if not cfg.audio_dir.is_dir():
+            log.warning("The NAS folder %s isn't there (is it mounted?)", cfg.audio_dir)
             return 0
         known = {r[0] for r in self.conn.execute("select file_path from recordings")}
+        tz = local_tz(cfg.tz)
         added = 0
-        for f in walk_audio(self.cfg.audio_dir, self.cfg.extensions):
+        for f in walk_audio(cfg.audio_dir, cfg.extensions):
             if f.rel in known or stop.is_set():
                 continue
-            ok, meta = self.ready(f)
+            ok, meta = self.ready(cfg, f)
             if not ok:
                 continue
             duration = getattr(meta, "duration", None) or probe_duration(f.path)
-            started = recorded_at(f, meta, duration, self.tz)  # type: ignore[arg-type]
+            started = recorded_at(f, meta, duration, tz)  # type: ignore[arg-type]
             title = getattr(meta, "name", None) or meeting_name(f.rel)
             self.conn.execute(
-                """insert into recordings (file_path, file_size, duration_secs, recorded_at, device, title_hint, status)
-                   values (%s, %s, %s, %s, %s, %s, 'pending') on conflict (file_path) do nothing""",
+                """insert into recordings (file_path, file_size, duration_secs, recorded_at, device, title_hint, status, storage)
+                   values (%s, %s, %s, %s, %s, %s, 'pending', 'folder') on conflict (file_path) do nothing""",
                 (f.rel, f.size, round(duration) if duration else None, started, device_for(f.rel), title),
             )
             self.seen_sizes.pop(f.rel, None)
@@ -109,24 +128,41 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60] or "recording"
 
 
+def audio_path(cfg: Config, rel: str, storage: str) -> Path | None:
+    """The server's copy if there is one, else the NAS folder's. (The web app brings S3 recordings back first.)"""
+    local = cfg.recordings_dir / rel
+    if local.is_file():
+        return local
+    if storage == "folder" and cfg.audio_dir is not None and (cfg.audio_dir / rel).is_file():
+        return cfg.audio_dir / rel
+    return None
+
+
 class Worker:
     def __init__(self, cfg: Config, conn: psycopg.Connection):
         self.cfg = cfg
         self.conn = conn
         self.engine = Transcriber(cfg)
 
+    def configure(self, cfg: Config) -> None:
+        """Picks up changed settings; the models load again only if what they depend on changed."""
+        if cfg.engine_key() != self.cfg.engine_key():
+            log.info("Transcription settings changed: model %s on %s, speaker labels %s", cfg.model, cfg.device, "on" if cfg.diarize else "off")
+            self.engine = Transcriber(cfg)
+        self.cfg = cfg
+
     def claim(self):
         return self.conn.execute(
             """update recordings set status = 'processing', progress = 0, error = null
                where id = (select id from recordings where status = 'pending'
                            order by recorded_at desc limit 1 for update skip locked)
-               returning id, file_path, recorded_at, title_hint"""
+               returning id, file_path, storage, recorded_at, title_hint"""
         ).fetchone()
 
     def export(self, rec_id, rel: str, started: datetime, title: str | None, result) -> None:
         if not self.cfg.export_dir:
             return
-        day = started.astimezone(local_tz()).strftime("%Y-%m-%d")
+        day = started.astimezone(local_tz(self.cfg.tz)).strftime("%Y-%m-%d")
         folder = self.cfg.export_dir / day
         folder.mkdir(parents=True, exist_ok=True)
         base = folder / f"{slug(title or Path(rel).parent.name or Path(rel).stem)}-{str(rec_id)[:8]}"
@@ -147,8 +183,7 @@ class Worker:
         )
 
     def process(self, row) -> None:
-        rec_id, rel, started, title = row
-        path = self.cfg.audio_dir / rel
+        rec_id, rel, storage, started, title = row
         log.info("Transcribing %s…", rel)
         t0 = time.monotonic()
 
@@ -156,8 +191,9 @@ class Worker:
             self.conn.execute("update recordings set progress = %s where id = %s", (round(p, 3), rec_id))
 
         try:
-            if not path.is_file():
-                raise FileNotFoundError(f"{rel} is no longer in the recordings folder")
+            path = audio_path(self.cfg, rel, storage)
+            if path is None:
+                raise FileNotFoundError(f"{rel} isn't on the server or in the NAS folder")
             result = self.engine.run(path, progress)
             with self.conn.transaction():
                 tid = self.conn.execute(
@@ -174,7 +210,7 @@ class Worker:
                        where id = %s""",
                     (round(result.duration), Jsonb(result.peaks), rec_id),
                 )
-            # calendar-sync listens and links the transcript to its meeting straight away.
+            # calendar-sync listens: it links the transcript to its meeting, summarizes and archives it.
             self.conn.execute("select pg_notify('debrief_transcribed', %s)", (str(tid),))
             try:
                 self.export(rec_id, rel, started, title, result)
@@ -197,31 +233,36 @@ def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
 
-    cfg = Config.from_env()
+    url = database_url()
+    conn = connect(url)
+    cfg = load_config(conn)
     log.info(
-        "Watching %s every %.0fs; model %s on %s; speaker labels %s",
-        cfg.audio_dir, cfg.scan_interval, cfg.model, cfg.device, "on" if cfg.diarize else "off",
+        "Model %s on %s; speaker labels %s; %s",
+        cfg.model, cfg.device, "on" if cfg.diarize else "off",
+        f"watching {cfg.audio_dir} every {cfg.scan_interval:.0f}s" if cfg.watch else "not watching a folder",
     )
-    conn = connect(cfg)
     # One transcriber per database: anything left mid-way by a restart starts over.
     conn.execute("update recordings set status = 'pending', progress = null where status = 'processing'")
-    scanner = Scanner(cfg, conn)
+    scanner = Scanner(conn)
     worker = Worker(cfg, conn)
     once = os.environ.get("RUN_ONCE") == "1"
 
     while not stop.is_set():
         try:
-            scanner.scan()
+            cfg = load_config(conn)
+            worker.configure(cfg)
+            scanner.scan(cfg)
             while not stop.is_set() and (row := worker.claim()):
                 worker.process(row)
-                scanner.scan()
+                scanner.scan(cfg)
         except psycopg.OperationalError as err:
             log.error("Lost the database: %s; reconnecting", err)
-            conn = connect(cfg)
+            conn = connect(url)
             scanner.conn = worker.conn = conn
+            continue
         if once:
             break
-        stop.wait(cfg.scan_interval)
+        wait(conn, cfg.scan_interval)
     log.info("Stopped.")
 
 

@@ -5,6 +5,7 @@ import { transcripts } from "./schema";
 import { saveExtractedTasks, taskInput } from "./tasks";
 import { requestPublish } from "./notes";
 import { z } from "zod";
+import { setting, settingBool, timeZone } from "./settings";
 
 export function clock(secs: number) {
   const s = Math.max(0, Math.floor(secs));
@@ -30,7 +31,7 @@ export function transcriptText(m: Pick<Meeting, "transcript">) {
 export function meetingBrief(m: Meeting) {
   const lines = [
     `Meeting: ${m.displayTitle}`,
-    `Date: ${m.recording.recordedAt.toLocaleString("en-US", { timeZone: process.env.TZ || undefined, dateStyle: "full", timeStyle: "short" })}${m.recording.durationSecs ? ` (${Math.round(m.recording.durationSecs / 60)} min)` : ""}`,
+    `Date: ${m.recording.recordedAt.toLocaleString("en-US", { timeZone: timeZone(), dateStyle: "full", timeStyle: "short" })}${m.recording.durationSecs ? ` (${Math.round(m.recording.durationSecs / 60)} min)` : ""}`,
     m.context ? `Calendar context: ${m.context}` : null,
     m.event?.organizerEmail ? `Organizer: ${m.event.organizerEmail}` : null,
     m.attendees.length ? `Attendees: ${m.attendees.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", ")}` : null,
@@ -52,9 +53,9 @@ Leave out small talk, decisions with no follow-up, and things already done in th
 
 const extraction = z.object({ summary: z.string().max(4000), tasks: z.array(taskInput).max(50) });
 
-export const extractionAvailable = () => !!process.env.ANTHROPIC_API_KEY;
+export const extractionAvailable = () => !!setting("ANTHROPIC_API_KEY");
 /** Summarize every new transcript as soon as it's linked (AUTO_EXTRACT=false to only do it on request). */
-export const autoExtract = () => extractionAvailable() && process.env.AUTO_EXTRACT !== "false";
+export const autoExtract = () => extractionAvailable() && settingBool("AUTO_EXTRACT");
 
 /**
  * Has Claude (through the API) summarize a meeting and pull out its action
@@ -62,7 +63,7 @@ export const autoExtract = () => extractionAvailable() && process.env.AUTO_EXTRA
  * tools from a Claude client instead.
  */
 export async function extractWithClaude(db: Db, transcriptId: string) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = setting("ANTHROPIC_API_KEY");
   if (!key) throw new Error("Set ANTHROPIC_API_KEY to extract tasks here, or ask Claude through the MCP server.");
   const m = await getMeeting(db, transcriptId);
   if (!m) throw new Error("No such transcript.");
@@ -72,7 +73,7 @@ export async function extractWithClaude(db: Db, transcriptId: string) {
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
     signal: AbortSignal.timeout(180_000),
     body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+      model: setting("ANTHROPIC_MODEL"),
       max_tokens: 8000,
       system: `You review meeting transcripts and record what needs to happen next.\n\n${EXTRACTION_GUIDE}\n\nAlso write a summary: 2–5 sentences on what the meeting covered and decided.`,
       tools: [

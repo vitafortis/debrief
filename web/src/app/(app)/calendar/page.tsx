@@ -4,16 +4,16 @@ import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { listContexts, listEventsWithStatus, type EventStatus } from "@debrief/core";
 import { db } from "@/lib/db";
 import { currentContext } from "@/lib/context";
-import { addDays, fmtTime, isoDay, minutesOfDay, startOfDay, zonedMidnight, TZ } from "@/lib/format";
+import { addDays, fmt, fmtTime, isoDay, minutesOfDay, startOfDay, zonedMidnight } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { EmptyState, PageHeader, StatusDot } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Calendar" };
 
 const HOUR = 44; // px per hour
-const weekdayFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" });
-const dayNumFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, day: "numeric" });
-const rangeFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "long", year: "numeric" });
+const weekdayFmt = { format: (d: Date) => fmt({ weekday: "short" }).format(d) };
+const dayNumFmt = { format: (d: Date) => fmt({ day: "numeric" }).format(d) };
+const rangeFmt = { format: (d: Date) => fmt({ month: "long", year: "numeric" }).format(d) };
 
 type Ev = Awaited<ReturnType<typeof listEventsWithStatus>>[number];
 

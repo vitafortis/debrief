@@ -141,8 +141,9 @@ def recorded_at(found: Found, meta: Meta | None, duration: float | None, tz: Zon
     return end - timedelta(seconds=duration or 0)
 
 
-def local_tz() -> ZoneInfo | timezone:
-    name = os.environ.get("TZ")
+def local_tz(name: str | None = None) -> ZoneInfo | timezone:
+    """The owner's zone (Settings → General), else TZ, else the system's."""
+    name = name or os.environ.get("TZ")
     if name:
         try:
             return ZoneInfo(name)

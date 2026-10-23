@@ -3,7 +3,7 @@
  * action items it finds, and send them to Akiflow or Linear.
  *
  * Streamable HTTP at /mcp, stateless, behind a bearer token: an API key
- * from Settings, or MCP_TOKEN.
+ * from Settings, or the fixed MCP token (Settings → Claude).
  */
 import crypto from "node:crypto";
 import http from "node:http";
@@ -25,12 +25,16 @@ import {
   listTasks,
   meetingBrief,
   meetingTitle,
+  publicUrl,
   pushTask,
+  refreshSettings,
   requestPublish,
   saveExtractedTasks,
   searchTranscripts,
   setTaskStatus,
+  setting,
   taskInput,
+  timeZone,
   transcriptText,
   transcripts,
   updateTask,
@@ -42,8 +46,6 @@ import { waitForSchema } from "@debrief/core/migrate";
 
 process.env.DATABASE_URL ||= process.env.POSTGRES_URL;
 const PORT = Number(process.env.PORT ?? 3151);
-// Claude sends a bearer token: an API key made in Settings, or MCP_TOKEN if set.
-const TOKEN = process.env.MCP_TOKEN ?? "";
 const NO_AUTH = process.env.MCP_ALLOW_NO_AUTH === "true";
 
 const db = () => getDb();
@@ -51,7 +53,7 @@ const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const fail = (msg: string) => ({ content: [{ type: "text" as const, text: msg }], isError: true });
 const plain = (s: string) => s.replaceAll(HL_START, "**").replaceAll(HL_END, "**");
-const link = (id: string) => (process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL.replace(/\/$/, "")}/meetings/${id}` : undefined);
+const link = (id: string) => (publicUrl() ? `${publicUrl()}/meetings/${id}` : undefined);
 const date = (s: string | undefined, name: string) => {
   if (!s) return undefined;
   const d = new Date(s);
@@ -220,7 +222,7 @@ function build() {
       return text(
         [
           EXTRACTION_GUIDE,
-          `Today is ${new Date().toLocaleDateString("en-CA", { timeZone: process.env.TZ || undefined })}.`,
+          `Today is ${new Date().toLocaleDateString("en-CA", { timeZone: timeZone() })}.`,
           existing.length
             ? `Already reviewed or sent (don't repeat these): ${existing.map((t) => `"${t.description}"`).join("; ")}.`
             : null,
@@ -368,9 +370,11 @@ async function authorized(req: http.IncomingMessage) {
   if (NO_AUTH) return true;
   const got = bearer(req.headers.authorization);
   if (!got) return false;
-  if (TOKEN) {
+  // Claude sends a bearer token: an API key made in Settings, or the fixed MCP token.
+  const token = setting("MCP_TOKEN");
+  if (token) {
     const a = crypto.createHash("sha256").update(got).digest();
-    const b = crypto.createHash("sha256").update(TOKEN).digest();
+    const b = crypto.createHash("sha256").update(token).digest();
     if (crypto.timingSafeEqual(a, b)) return true;
   }
   return !!(await verifyApiKey(db(), got));
@@ -401,6 +405,7 @@ http
       res.writeHead(404).end();
       return;
     }
+    await refreshSettings(db());
     if (!(await authorized(req))) {
       res.writeHead(401, { "content-type": "application/json", "www-authenticate": "Bearer" }).end('{"error":"Missing or wrong bearer token"}');
       return;

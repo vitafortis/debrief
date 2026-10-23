@@ -13,6 +13,7 @@ import {
   transcripts,
   type TaskDestination,
 } from "./schema";
+import { publicUrl, setting, settingNumber, timeZone } from "./settings";
 
 /** An action item as Claude (or a person) hands it over. */
 export const taskInput = z.object({
@@ -143,28 +144,28 @@ export async function listTasks(db: Db, f: TaskFilter = {}) {
 
 export function integrationStatus() {
   return {
-    akiflow: !!process.env.AKIFLOW_WEBHOOK_URL,
-    linear: !!process.env.LINEAR_API_KEY,
+    akiflow: !!setting("AKIFLOW_WEBHOOK_URL"),
+    linear: !!setting("LINEAR_API_KEY"),
   };
 }
 
-function publicUrl(path: string) {
-  const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
+function linkTo(path: string) {
+  const base = publicUrl();
   return base ? `${base}${path}` : null;
 }
 
 function fmtDate(d: Date) {
-  return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", timeZone: process.env.TZ || undefined });
+  return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", timeZone: timeZone() });
 }
 
-const today = () => new Date().toLocaleDateString("en-CA", { timeZone: process.env.TZ || undefined });
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone: timeZone() });
 
 /** The JSON sent to the Akiflow webhook (IFTTT / Zapier / Make turn it into a task). */
 export function akiflowPayload(
   task: typeof tasks.$inferSelect,
   meeting: { title: string; recordedAt: Date; transcriptId: string }
 ) {
-  const link = publicUrl(`/meetings/${meeting.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`);
+  const link = linkTo(`/meetings/${meeting.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`);
   const description = [
     `From ${meeting.title} ${fmtDate(meeting.recordedAt)}${task.details ? ` — ${task.details}` : ""}`,
     task.assignee ? `Owner: ${task.assignee}` : null,
@@ -175,7 +176,7 @@ export function akiflowPayload(
   return {
     title: task.description,
     date: today(),
-    duration: Number(process.env.AKIFLOW_DEFAULT_DURATION ?? 30),
+    duration: settingNumber("AKIFLOW_DEFAULT_DURATION"),
     priority: task.priority ?? "medium",
     due_date: task.dueDate,
     description,
@@ -185,8 +186,8 @@ export function akiflowPayload(
 }
 
 async function pushToAkiflow(payload: ReturnType<typeof akiflowPayload>) {
-  const url = process.env.AKIFLOW_WEBHOOK_URL;
-  if (!url) throw new Error("Akiflow isn't set up: set AKIFLOW_WEBHOOK_URL.");
+  const url = setting("AKIFLOW_WEBHOOK_URL");
+  if (!url) throw new Error("Akiflow isn't set up: add its webhook in Settings → Tasks.");
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -200,8 +201,8 @@ async function pushToAkiflow(payload: ReturnType<typeof akiflowPayload>) {
 const LINEAR_PRIORITY = { high: 2, medium: 3, low: 4 } as const;
 
 async function linearQuery<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const key = process.env.LINEAR_API_KEY;
-  if (!key) throw new Error("Linear isn't set up: set LINEAR_API_KEY.");
+  const key = setting("LINEAR_API_KEY");
+  if (!key) throw new Error("Linear isn't set up: add an API key in Settings → Tasks.");
   const res = await fetch(process.env.LINEAR_API_URL ?? "https://api.linear.app/graphql", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: key },
@@ -220,13 +221,13 @@ const teamIds = new Map<string, string>();
 /** The Linear team for a context: LINEAR_TEAMS="acme:ENG,lumen:LUM", else LINEAR_TEAM. Keys or ids. */
 export async function linearTeamFor(context: string | null) {
   const map = Object.fromEntries(
-    (process.env.LINEAR_TEAMS ?? "")
+    setting("LINEAR_TEAMS")
       .split(",")
       .map((s) => s.split(":").map((x) => x.trim()))
       .filter((p) => p.length === 2 && p[0] && p[1])
   );
-  const team = (context && map[context]) || process.env.LINEAR_TEAM;
-  if (!team) throw new Error("No Linear team: set LINEAR_TEAM (a team key like ENG) or LINEAR_TEAMS per context.");
+  const team = (context && map[context]) || setting("LINEAR_TEAM");
+  if (!team) throw new Error("No Linear team: set one (a team key like ENG) in Settings → Tasks.");
   if (/^[0-9a-f-]{36}$/i.test(team)) return team;
   if (!teamIds.has(team)) {
     const data = await linearQuery<{ teams: { nodes: { id: string }[] } }>(
@@ -282,7 +283,7 @@ export async function pushTask(db: Db, id: string, destination?: TaskDestination
     if (dest === "akiflow") {
       result = await pushToAkiflow(akiflowPayload(task, ref));
     } else {
-      const link = publicUrl(`/meetings/${task.transcriptId}`);
+      const link = linkTo(`/meetings/${task.transcriptId}`);
       const issue = await createLinearIssue({
         title: task.description,
         description: [

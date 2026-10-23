@@ -1,9 +1,10 @@
 import { and, eq, gt, lt, notExists, sql } from "drizzle-orm";
 import type { Db } from "./db";
 import { calendarEvents, recordings, transcriptEvents, transcripts } from "./schema";
+import { settingNumber } from "./settings";
 
 /** Share of the overlap needed to link a recording to an event. */
-export const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 0.7);
+export const matchThreshold = () => settingNumber("MATCH_THRESHOLD");
 
 type Interval = { start: Date; end: Date };
 
@@ -27,7 +28,7 @@ export type Candidate = Interval & { id: string; hasConference: boolean };
  * threshold, best first. Back-to-back meetings caught in one recording both
  * match; on equal scores, events with a call link come first.
  */
-export function rankMatches(rec: Interval, candidates: Candidate[], threshold = MATCH_THRESHOLD) {
+export function rankMatches(rec: Interval, candidates: Candidate[], threshold = matchThreshold()) {
   return candidates
     .map((c) => ({ id: c.id, score: overlapScore(rec, c), hasConference: c.hasConference }))
     .filter((m) => m.score >= threshold)

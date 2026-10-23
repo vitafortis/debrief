@@ -1,18 +1,24 @@
-/** Times are shown in the owner's zone (TZ), on the server, so pages render the same everywhere. */
-export const TZ = process.env.TZ || "UTC";
+import { timeZone } from "@debrief/core/settings";
 
-const f = (opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, ...opts });
-const time = f({ hour: "numeric", minute: "2-digit" });
-const day = f({ weekday: "short", month: "short", day: "numeric" });
-const dayYear = f({ month: "short", day: "numeric", year: "numeric" });
-const iso = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+/** Times are shown in the owner's zone (Settings → General), on the server, so pages render the same everywhere. */
+export const tz = () => timeZone();
 
-export const fmtTime = (d: Date) => time.format(d);
-export const fmtDay = (d: Date) => day.format(d);
-export const fmtDayYear = (d: Date) => dayYear.format(d);
-export const fmtDateTime = (d: Date) => `${day.format(d)}, ${time.format(d)}`;
-/** YYYY-MM-DD in TZ. */
-export const isoDay = (d: Date) => iso.format(d);
+const cache = new Map<string, Intl.DateTimeFormat>();
+/** A formatter in the owner's zone, made once per zone. */
+export function fmt(opts: Intl.DateTimeFormatOptions, locale = "en-US") {
+  const zone = tz();
+  const key = `${zone}|${locale}|${JSON.stringify(opts)}`;
+  let f = cache.get(key);
+  if (!f) cache.set(key, (f = new Intl.DateTimeFormat(locale, { timeZone: zone, ...opts })));
+  return f;
+}
+
+export const fmtTime = (d: Date) => fmt({ hour: "numeric", minute: "2-digit" }).format(d);
+export const fmtDay = (d: Date) => fmt({ weekday: "short", month: "short", day: "numeric" }).format(d);
+export const fmtDayYear = (d: Date) => fmt({ month: "short", day: "numeric", year: "numeric" }).format(d);
+export const fmtDateTime = (d: Date) => `${fmtDay(d)}, ${fmtTime(d)}`;
+/** YYYY-MM-DD in the owner's zone. */
+export const isoDay = (d: Date) => fmt({ year: "numeric", month: "2-digit", day: "2-digit" }, "en-CA").format(d);
 
 export function fmtDuration(secs: number | null | undefined) {
   if (!secs) return "—";
@@ -31,24 +37,16 @@ export function fmtAgo(d: Date, now = new Date()) {
   return fmtDay(d);
 }
 
-/** Midnight in TZ for the day containing `d`, as an instant. */
+/** Midnight in the owner's zone for the day containing `d`, as an instant. */
 export function startOfDay(d: Date) {
   const [y, m, dd] = isoDay(d).split("-").map(Number);
   return zonedMidnight(y, m, dd);
 }
 
 export function zonedMidnight(y: number, m: number, d: number) {
-  // Find the UTC instant whose TZ wall-clock time is y-m-d 00:00.
+  // Find the UTC instant whose wall-clock time is y-m-d 00:00.
   const guess = Date.UTC(y, m - 1, d);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-  }).formatToParts(new Date(guess));
+  const parts = fmt({ hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).formatToParts(new Date(guess));
   const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
   const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
   return new Date(guess - (asUtc - guess));
@@ -59,8 +57,8 @@ export function addDays(d: Date, n: number) {
   return zonedMidnight(y, m, dd + n);
 }
 
-/** Minutes since midnight in TZ. */
+/** Minutes since midnight in the owner's zone. */
 export function minutesOfDay(d: Date) {
-  const p = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hourCycle: "h23", hour: "numeric", minute: "numeric" }).formatToParts(d);
+  const p = fmt({ hourCycle: "h23", hour: "numeric", minute: "numeric" }).formatToParts(d);
   return Number(p.find((x) => x.type === "hour")?.value) * 60 + Number(p.find((x) => x.type === "minute")?.value);
 }

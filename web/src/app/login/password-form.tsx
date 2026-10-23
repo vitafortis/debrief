@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { signInWithPassword } from "@/actions/session";
 
-export function PasswordForm({ callbackUrl }: { callbackUrl: string }) {
+export function PasswordForm({ callbackUrl, autoFocus = true }: { callbackUrl: string; autoFocus?: boolean }) {
   const [state, action, pending] = useActionState(signInWithPassword, null);
   return (
     <form action={action}>
@@ -12,7 +12,7 @@ export function PasswordForm({ callbackUrl }: { callbackUrl: string }) {
       <label className="label" htmlFor="pw">
         Password
       </label>
-      <input id="pw" name="password" className="input" type="password" autoComplete="current-password" autoFocus required />
+      <input id="pw" name="password" className="input" type="password" autoComplete="current-password" autoFocus={autoFocus} required />
       <button className="btn btn-primary mt-5 w-full" disabled={pending}>
         {pending ? <LoaderCircle className="animate-spin" /> : null}
         Sign in
