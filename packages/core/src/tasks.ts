@@ -217,7 +217,7 @@ async function linearQuery<T>(query: string, variables: Record<string, unknown>)
 
 const teamIds = new Map<string, string>();
 
-/** The Linear team for a context: LINEAR_TEAMS="ironclad:ENG,pwnbook:PWN", else LINEAR_TEAM. Keys or ids. */
+/** The Linear team for a context: LINEAR_TEAMS="acme:ENG,lumen:LUM", else LINEAR_TEAM. Keys or ids. */
 export async function linearTeamFor(context: string | null) {
   const map = Object.fromEntries(
     (process.env.LINEAR_TEAMS ?? "")

@@ -71,11 +71,11 @@ test.describe("signed in", () => {
 
   test("export as Markdown", async ({ page }) => {
     await page.goto("/meetings");
-    await page.getByRole("link", { name: /pwnbook roadmap/ }).click();
+    await page.getByRole("link", { name: /lumen roadmap/ }).click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Markdown" }).click()]);
     const body = await (await download.createReadStream()).toArray();
     const md = Buffer.concat(body).toString();
-    expect(md).toContain("# pwnbook roadmap");
+    expect(md).toContain("# lumen roadmap");
     expect(md).toContain("**Jules Moreau** `0:04`");
     expect(md).toContain("- [x] Fix the Stripe webhook");
   });
@@ -114,18 +114,18 @@ test.describe("signed in", () => {
   test("search shows matching lines with speakers and links into the meeting", async ({ page }) => {
     await page.goto("/search?q=Stripe%20webhook");
     await expect(page.getByText("1 meeting matching")).toBeVisible();
-    const line = page.getByRole("link", { name: /Nathan.*Stripe webhook bug/ });
+    const line = page.getByRole("link", { name: /Alex.*Stripe webhook bug/ });
     await expect(line.locator("mark").first()).toBeVisible();
     await line.click();
     await expect(page).toHaveURL(/\/meetings\/[0-9a-f-]+\?q=Stripe%20webhook&t=\d+/);
-    await expect(page.getByRole("heading", { name: "pwnbook roadmap" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "lumen roadmap" })).toBeVisible();
   });
 
   test("the calendar context filter narrows every page", async ({ page }) => {
-    await page.getByRole("button", { name: "pwnbook" }).click();
-    await expect(page.getByRole("button", { name: "pwnbook" })).toHaveClass(/bg-accent /);
+    await page.getByRole("button", { name: "lumen" }).click();
+    await expect(page.getByRole("button", { name: "lumen" })).toHaveClass(/bg-accent /);
     await page.goto("/meetings");
-    await expect(page.getByText("pwnbook roadmap")).toBeVisible();
+    await expect(page.getByText("lumen roadmap")).toBeVisible();
     await expect(page.getByText("Northwind onboarding call")).toHaveCount(0);
     await page.goto("/calendar");
     await expect(page.getByText("Beta demo")).toBeVisible();
@@ -142,15 +142,15 @@ test.describe("signed in", () => {
     await page.locator("#cal-ctx").fill("side");
     await page.getByRole("button", { name: "Add calendar" }).click();
     await expect(page.getByText("An ICS feed is a link starting with https://.")).toBeVisible();
-    await page.getByLabel("Sync pwnbook").uncheck();
+    await page.getByLabel("Sync lumen").uncheck();
     await expect(page.getByText("Off", { exact: true }).first()).toBeVisible();
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "pwnbook" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "lumen" })).toHaveCount(0);
     await page.goto("/settings");
-    await page.getByLabel("Sync pwnbook").check();
+    await page.getByLabel("Sync lumen").check();
     await expect(page.locator("p", { hasText: /^Synced/ })).toHaveCount(2);
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "pwnbook" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "lumen" })).toBeVisible();
   });
 
   test("a key from Settings lets the recorder upload; then its device can be tagged and the key revoked", async ({ page, request }) => {
@@ -177,10 +177,10 @@ test.describe("signed in", () => {
     await page.reload();
     const ctx = page.getByLabel("Context for e2e-mac");
     await expect(ctx).toHaveValue("");
-    await ctx.selectOption("pwnbook");
+    await ctx.selectOption("lumen");
     await expect(page.getByLabel("Tasks from e2e-mac go to")).toBeEnabled();
     await page.reload();
-    await expect(page.getByLabel("Context for e2e-mac")).toHaveValue("pwnbook");
+    await expect(page.getByLabel("Context for e2e-mac")).toHaveValue("lumen");
 
     page.once("dialog", (d) => d.accept());
     await page.locator("div", { hasText: /^E2E MacBook/ }).getByTitle("Revoke").click();

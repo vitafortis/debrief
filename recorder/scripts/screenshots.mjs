@@ -8,7 +8,7 @@ const ui = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../ui");
 const out = path.resolve(ui, "../../docs/screenshots");
 
 const settings = {
-  server_url: "https://debrief.armgrp.dev",
+  server_url: "https://debrief.example.com",
   fallback_url: "http://192.168.1.20:3000",
   api_key: "dbk_7pQ2xVd9…",
   device_name: "work-macbook",
@@ -35,8 +35,8 @@ const status = {
   elapsed: "23:41",
   mic_level: 260,
   system_level: 480,
-  upload: { online: true, server: "https://debrief.armgrp.dev", waiting: 0, last_error: null },
-  recordings_dir: "~/Library/Application Support/dev.armgrp.debrief.recorder/recordings",
+  upload: { online: true, server: "https://debrief.example.com", waiting: 0, last_error: null },
+  recordings_dir: "~/Library/Application Support/io.github.vitafortis.debrief.recorder/recordings",
   recent: [
     { started_at: ago(24), app: "zoom.us", minutes: 23.7, state: "recording" },
     { started_at: ago(150), app: "Microsoft Teams", minutes: 31.2, state: "uploaded" },

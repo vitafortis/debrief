@@ -41,7 +41,7 @@ const primaryEvent = (db: Db) =>
 export const meetingContext = sql<string | null>`coalesce(${calendars.context}, ${devices.context})`;
 
 export type MeetingFilter = {
-  /** A calendar context ("ironclad"), or "unmatched" for meetings with no event. */
+  /** A calendar context ("acme"), or "unmatched" for meetings with no event. */
   context?: string | null;
   from?: Date;
   to?: Date;

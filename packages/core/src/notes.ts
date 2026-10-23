@@ -68,7 +68,7 @@ export async function writeMeetingNotes(m: Meeting) {
   return file;
 }
 
-/** The Slack incoming webhook for a context: SLACK_WEBHOOKS="ironclad:https://hooks…,pwnbook:https://hooks…", else SLACK_WEBHOOK_URL. */
+/** The Slack incoming webhook for a context: SLACK_WEBHOOKS="acme:https://hooks…,lumen:https://hooks…", else SLACK_WEBHOOK_URL. */
 export function slackWebhookFor(context: string | null) {
   const map = Object.fromEntries(
     (process.env.SLACK_WEBHOOKS ?? "")

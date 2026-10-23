@@ -25,7 +25,7 @@ pub struct AppRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Debrief, e.g. https://debrief.armgrp.dev
+    /// Debrief, e.g. https://debrief.example.com
     pub server_url: String,
     /// Tried when the main one can't be reached, e.g. http://debrief.lan:3000 at home.
     pub fallback_url: String,

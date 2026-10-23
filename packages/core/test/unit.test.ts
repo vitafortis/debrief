@@ -96,7 +96,7 @@ test("akiflow payload follows the plan's shape and dedup key", () => {
       details: "Sarah mentioned API v2 timeline may slip",
       dueDate: "2026-10-25",
       priority: "high",
-      context: "ironclad",
+      context: "acme",
       assignee: null,
       sourceStart: 125.4,
     } as never,

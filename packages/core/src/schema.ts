@@ -32,7 +32,7 @@ export const PRIORITIES = ["high", "medium", "low"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
 /**
- * A calendar Debrief reads. `context` ("ironclad", "pwnbook") is what splits
+ * A calendar Debrief reads. `context` ("acme", "lumen") is what splits
  * work from side projects: meetings, search and task routing filter on it.
  */
 export const calendars = pgTable(

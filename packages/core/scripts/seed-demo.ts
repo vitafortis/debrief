@@ -29,8 +29,8 @@ function at(dayOffset: number, hh: number, mm = 0) {
 const [work, side, personal] = await db
   .insert(calendars)
   .values([
-    { source: "google", externalId: "me@ironclad.example", name: "Work", context: "ironclad", lastSyncedAt: new Date(Date.now() - 3 * 60_000) },
-    { source: "google", externalId: "primary", name: "pwnbook", context: "pwnbook", defaultDestination: "linear", lastSyncedAt: new Date(Date.now() - 3 * 60_000) },
+    { source: "google", externalId: "me@acme.example", name: "Work", context: "acme", lastSyncedAt: new Date(Date.now() - 3 * 60_000) },
+    { source: "google", externalId: "primary", name: "lumen", context: "lumen", defaultDestination: "linear", lastSyncedAt: new Date(Date.now() - 3 * 60_000) },
     { source: "ics", externalId: "https://calendar.example.com/feeds/holidays.ics", name: "Holidays", context: "personal", enabled: false },
   ])
   .returning();
@@ -38,11 +38,11 @@ void personal;
 
 type Person = { name: string; email: string };
 const P = {
-  me: { name: "Nathan", email: "me@ironclad.example" },
-  sarah: { name: "Sarah Okafor", email: "sarah@ironclad.example" },
-  dev: { name: "Dev Patel", email: "dev@ironclad.example" },
-  maria: { name: "Maria Lindqvist", email: "maria@ironclad.example" },
-  jules: { name: "Jules Moreau", email: "jules@pwnbook.example" },
+  me: { name: "Alex", email: "me@acme.example" },
+  sarah: { name: "Sarah Okafor", email: "sarah@acme.example" },
+  dev: { name: "Dev Patel", email: "dev@acme.example" },
+  maria: { name: "Maria Lindqvist", email: "maria@acme.example" },
+  jules: { name: "Jules Moreau", email: "jules@lumen.example" },
   kai: { name: "Kai Tanaka", email: "kai@client-northwind.example" },
 } satisfies Record<string, Person>;
 
@@ -134,15 +134,15 @@ async function meeting(opts: {
 const standupToday = await event(work, "Platform standup", at(0, 9, 30), 15, [P.sarah, P.dev, P.maria, P.me]);
 void standupToday;
 await event(work, "API v2 design review", at(0, 13, 0), 60, [P.maria, P.dev, P.me]);
-await event(side, "pwnbook: sync with Jules", at(0, 17, 30), 30, [P.jules, P.me]);
-await event(work, "1:1 Sarah", at(0, 15, 0), 30, [P.sarah, P.me], "https://ironclad.zoom.us/j/5550101");
+await event(side, "lumen: sync with Jules", at(0, 17, 30), 30, [P.jules, P.me]);
+await event(work, "1:1 Sarah", at(0, 15, 0), 30, [P.sarah, P.me], "https://acme.zoom.us/j/5550101");
 
 const standup = await meeting({
   file: "mac-work/Platform_standup_today/audio.mp4",
   start: at(0, 9, 31),
   mins: 14,
   device: "mac-work",
-  names: { SPEAKER_00: "Sarah Okafor", SPEAKER_01: "Dev Patel", SPEAKER_02: "Nathan", SPEAKER_03: "Maria Lindqvist" },
+  names: { SPEAKER_00: "Sarah Okafor", SPEAKER_01: "Dev Patel", SPEAKER_02: "Alex", SPEAKER_03: "Maria Lindqvist" },
   summary:
     "Quick standup. The API v2 timeline may slip a week because the auth migration is still blocking the gateway work. Dev is fixing the login redirect bug before Thursday's release; Maria needs load-test numbers before the design review.",
   lines: [
@@ -172,19 +172,19 @@ await meeting({
 });
 
 await event(work, "Platform standup", at(-1, 9, 30), 15, [P.sarah, P.dev, P.maria, P.me]);
-const northwindEvent = await event(work, "Northwind onboarding call", at(-1, 11, 0), 45, [P.kai, P.sarah, P.me], "https://ironclad.zoom.us/j/5550199");
+const northwindEvent = await event(work, "Northwind onboarding call", at(-1, 11, 0), 45, [P.kai, P.sarah, P.me], "https://acme.zoom.us/j/5550199");
 void northwindEvent;
 const northwind = await meeting({
   file: "mac-work/Northwind_onboarding_call/audio.mp4",
   start: at(-1, 11, 3),
   mins: 41,
   device: "mac-work",
-  names: { SPEAKER_00: "Kai Tanaka", SPEAKER_01: "Sarah Okafor", SPEAKER_02: "Nathan" },
+  names: { SPEAKER_00: "Kai Tanaka", SPEAKER_01: "Sarah Okafor", SPEAKER_02: "Alex" },
   summary:
     "Kickoff with Northwind. They want SSO through Okta before rolling out to their 300 seats, and an export of audit logs for their compliance team. Go-live target is the 15th of next month.",
   lines: [
     ["SPEAKER_00", "Thanks for making time. The big thing for us is SSO, we can't roll out to all three hundred seats without Okta."],
-    ["SPEAKER_01", "That's supported. Nathan, can you send Kai the SAML setup guide after this?"],
+    ["SPEAKER_01", "That's supported. Alex, can you send Kai the SAML setup guide after this?"],
     ["SPEAKER_02", "Yes, I'll send it this afternoon along with the metadata URL."],
     ["SPEAKER_00", "Our compliance team will also ask for audit log exports. Is that a CSV or an API?"],
     ["SPEAKER_02", "Both. The API is better for them if they want it on a schedule. I'll set up a sandbox org so they can try it."],
@@ -194,15 +194,15 @@ const northwind = await meeting({
 });
 
 await event(work, "Platform standup", at(-2, 9, 30), 15, [P.sarah, P.dev, P.maria, P.me]);
-await event(side, "pwnbook roadmap", at(-2, 19, 0), 60, [P.jules, P.me], "https://app.slack.com/huddle/T0001/C0001");
+await event(side, "lumen roadmap", at(-2, 19, 0), 60, [P.jules, P.me], "https://app.slack.com/huddle/T0001/C0001");
 const roadmap = await meeting({
-  file: "win-desktop/pwnbook_roadmap/audio.mp4",
+  file: "win-desktop/lumen_roadmap/audio.mp4",
   start: at(-2, 19, 2),
   mins: 56,
   device: "win-desktop",
-  names: { SPEAKER_00: "Jules Moreau", SPEAKER_01: "Nathan" },
+  names: { SPEAKER_00: "Jules Moreau", SPEAKER_01: "Alex" },
   summary:
-    "Roadmap for the next pwnbook release: ship the report template editor first, then shared engagements. Jules will draft the pricing page; Nathan owns the PDF renderer rewrite and the Stripe webhook bug.",
+    "Roadmap for the next lumen release: ship the report template editor first, then shared engagements. Jules will draft the pricing page; Alex owns the PDF renderer rewrite and the Stripe webhook bug.",
   lines: [
     ["SPEAKER_00", "So for the next release I think the report template editor has to come first. Every pentester we talked to asked for it."],
     ["SPEAKER_01", "Agreed. The PDF renderer needs a rewrite for that anyway, the current one can't do custom headers. I'll own that."],
@@ -243,7 +243,7 @@ await meeting({
 });
 
 await event(work, "Platform standup", at(1, 9, 30), 15, [P.sarah, P.dev, P.maria, P.me]);
-await event(work, "Northwind SSO check-in", at(2, 10, 0), 30, [P.kai, P.me], "https://ironclad.zoom.us/j/5550111");
+await event(work, "Northwind SSO check-in", at(2, 10, 0), 30, [P.kai, P.me], "https://acme.zoom.us/j/5550111");
 await event(side, "Beta demo", at(3, 18, 0), 45, [P.jules, P.me]);
 
 // ── Tasks ────────────────────────────────────────────────────────────────
@@ -251,23 +251,23 @@ await event(side, "Beta demo", at(3, 18, 0), 45, [P.jules, P.me]);
 const day = (n: number) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(at(n, 12));
 let n = 1;
 await db.insert(tasks).values([
-  { transcriptId: standup!.id, itemNumber: n++, description: "Send Sarah the API v2 timeline", details: "The auth migration is blocking gateway work; expect about a week's slip.", assignee: "Nathan", dueDate: day(2), priority: "high", destination: "akiflow", context: "ironclad", sourceStart: 31 },
-  { transcriptId: standup!.id, itemNumber: n++, description: "Fix the login redirect bug when the session expires mid-checkout", assignee: "Dev Patel", dueDate: day(1), priority: "high", destination: "linear", context: "ironclad", sourceStart: 9 },
-  { transcriptId: standup!.id, itemNumber: n++, description: "Run the k6 load-test suite against staging before the design review", assignee: "Dev Patel", priority: "medium", destination: "akiflow", context: "ironclad", sourceStart: 54 },
-  { transcriptId: standup!.id, itemNumber: n++, description: "Update the runbook for the new rate limits", assignee: "Nathan", dueDate: day(8), priority: "low", destination: "linear", context: "ironclad", sourceStart: 77 },
+  { transcriptId: standup!.id, itemNumber: n++, description: "Send Sarah the API v2 timeline", details: "The auth migration is blocking gateway work; expect about a week's slip.", assignee: "Alex", dueDate: day(2), priority: "high", destination: "akiflow", context: "acme", sourceStart: 31 },
+  { transcriptId: standup!.id, itemNumber: n++, description: "Fix the login redirect bug when the session expires mid-checkout", assignee: "Dev Patel", dueDate: day(1), priority: "high", destination: "linear", context: "acme", sourceStart: 9 },
+  { transcriptId: standup!.id, itemNumber: n++, description: "Run the k6 load-test suite against staging before the design review", assignee: "Dev Patel", priority: "medium", destination: "akiflow", context: "acme", sourceStart: 54 },
+  { transcriptId: standup!.id, itemNumber: n++, description: "Update the runbook for the new rate limits", assignee: "Alex", dueDate: day(8), priority: "low", destination: "linear", context: "acme", sourceStart: 77 },
 ]);
 n = 1;
 await db.insert(tasks).values([
-  { transcriptId: northwind!.id, itemNumber: n++, description: "Send Kai the SAML setup guide and metadata URL", assignee: "Nathan", dueDate: day(-1), priority: "high", destination: "akiflow", context: "ironclad", sourceStart: 18, status: "pushed", pushedTo: "akiflow", externalId: `debrief-${northwind!.id}-1`, pushedAt: new Date() },
-  { transcriptId: northwind!.id, itemNumber: n++, description: "Set up a sandbox org for Northwind's compliance team to try audit log exports", assignee: "Nathan", priority: "medium", destination: "akiflow", context: "ironclad", sourceStart: 40, status: "approved" },
-  { transcriptId: northwind!.id, itemNumber: n++, description: "Book an SSO check-in with Northwind two weeks out", assignee: "Sarah Okafor", priority: "low", destination: "akiflow", context: "ironclad", sourceStart: 61 },
+  { transcriptId: northwind!.id, itemNumber: n++, description: "Send Kai the SAML setup guide and metadata URL", assignee: "Alex", dueDate: day(-1), priority: "high", destination: "akiflow", context: "acme", sourceStart: 18, status: "pushed", pushedTo: "akiflow", externalId: `debrief-${northwind!.id}-1`, pushedAt: new Date() },
+  { transcriptId: northwind!.id, itemNumber: n++, description: "Set up a sandbox org for Northwind's compliance team to try audit log exports", assignee: "Alex", priority: "medium", destination: "akiflow", context: "acme", sourceStart: 40, status: "approved" },
+  { transcriptId: northwind!.id, itemNumber: n++, description: "Book an SSO check-in with Northwind two weeks out", assignee: "Sarah Okafor", priority: "low", destination: "akiflow", context: "acme", sourceStart: 61 },
 ]);
 n = 1;
 await db.insert(tasks).values([
-  { transcriptId: roadmap!.id, itemNumber: n++, description: "Fix the Stripe webhook double-counting seats on renewal", assignee: "Nathan", priority: "high", destination: "linear", context: "pwnbook", sourceStart: 33, status: "pushed", pushedTo: "linear", externalId: "PWN-142", externalUrl: "https://linear.app/pwnbook/issue/PWN-142", pushedAt: new Date() },
-  { transcriptId: roadmap!.id, itemNumber: n++, description: "Rewrite the PDF renderer to support custom report headers", assignee: "Nathan", priority: "medium", destination: "linear", context: "pwnbook", sourceStart: 12 },
-  { transcriptId: roadmap!.id, itemNumber: n++, description: "Draft the new pricing page", assignee: "Jules Moreau", dueDate: day(3), priority: "medium", destination: "akiflow", context: "pwnbook", sourceStart: 45 },
-  { transcriptId: roadmap!.id, itemNumber: n++, description: "Prepare the beta group demo", assignee: "Nathan", dueDate: day(3), priority: "medium", destination: "akiflow", context: "pwnbook", sourceStart: 58 },
+  { transcriptId: roadmap!.id, itemNumber: n++, description: "Fix the Stripe webhook double-counting seats on renewal", assignee: "Alex", priority: "high", destination: "linear", context: "lumen", sourceStart: 33, status: "pushed", pushedTo: "linear", externalId: "LUM-142", externalUrl: "https://linear.app/lumen/issue/LUM-142", pushedAt: new Date() },
+  { transcriptId: roadmap!.id, itemNumber: n++, description: "Rewrite the PDF renderer to support custom report headers", assignee: "Alex", priority: "medium", destination: "linear", context: "lumen", sourceStart: 12 },
+  { transcriptId: roadmap!.id, itemNumber: n++, description: "Draft the new pricing page", assignee: "Jules Moreau", dueDate: day(3), priority: "medium", destination: "akiflow", context: "lumen", sourceStart: 45 },
+  { transcriptId: roadmap!.id, itemNumber: n++, description: "Prepare the beta group demo", assignee: "Alex", dueDate: day(3), priority: "medium", destination: "akiflow", context: "lumen", sourceStart: 58 },
 ]);
 
 const linked = await db.select({ n: sql<number>`count(*)::int` }).from(transcriptEvents);

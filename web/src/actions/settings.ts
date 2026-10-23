@@ -13,7 +13,7 @@ const context = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9][a-z0-9_-]{0,39}$/, "A context is one short word, like ironclad or pwnbook.");
+  .regex(/^[a-z0-9][a-z0-9_-]{0,39}$/, "A context is one short word, like acme or lumen.");
 
 const patch = z.object({
   name: z.string().trim().min(1).max(120).optional(),

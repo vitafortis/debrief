@@ -19,7 +19,7 @@ before(async () => {
   await runMigrations();
   const db = core.getDb();
   await db.execute(sql`truncate calendars, recordings, devices, uploads, api_keys cascade`);
-  const [cal] = await db.insert(core.calendars).values({ source: "ics", externalId: "https://x.example/a.ics", name: "Work", context: "ironclad" }).returning();
+  const [cal] = await db.insert(core.calendars).values({ source: "ics", externalId: "https://x.example/a.ics", name: "Work", context: "acme" }).returning();
   calendarId = cal.id;
   const [rec] = await db
     .insert(core.recordings)
@@ -72,7 +72,7 @@ test("events sync in, and the transcript links to the one it overlaps", { skip }
   assert.equal(matches.length, 1);
   const m = await core!.getMeeting(db, transcriptId);
   assert.equal(m!.displayTitle, "Pricing review");
-  assert.equal(m!.context, "ironclad");
+  assert.equal(m!.context, "acme");
   assert.deepEqual(m!.attendees.map((a) => a.email), ["sam@example.com"]);
 
   // Resync without the event: it's deleted and the link goes with it.
@@ -87,7 +87,7 @@ test("search finds the line, the speaker's name and the time", { skip }, async (
   const x = hit.excerpts.find((e) => e.start === 7)!;
   assert.equal(hit.speakerNames[x.speaker!], "Sam");
   assert.match(x.text, new RegExp(`${core!.HL_START}Friday${core!.HL_END}`));
-  assert.equal((await core!.searchTranscripts(db, "pricing", { context: "pwnbook" })).length, 0);
+  assert.equal((await core!.searchTranscripts(db, "pricing", { context: "lumen" })).length, 0);
 });
 
 test("extracting again keeps reviewed tasks and replaces unreviewed ones", { skip }, async () => {
@@ -125,27 +125,27 @@ test("an upload resumes at the right offset and finishes as a Meetily-style fold
   const id = "3b8f1c2a-0000-4000-8000-000000000001";
   const chunk = (s: string) => Readable.from([Buffer.from(s)]);
 
-  const s0 = await up.startUpload(db, id, { device: "Nathan's MacBook Pro", startedAt: "2026-10-22T18:00:00Z", app: "zoom.us", format: "opus" }, null, root);
+  const s0 = await up.startUpload(db, id, { device: "Alex's MacBook Pro", startedAt: "2026-10-22T18:00:00Z", app: "zoom.us", format: "opus" }, null, root);
   assert.equal(s0!.offset, 0);
   const a = await up.appendUpload(db, id, 0, chunk("hello "), 6, root);
   assert.equal(a.offset, 6);
   // A retried chunk at a stale offset writes nothing and says where to resume.
   await assert.rejects(up.appendUpload(db, id, 0, chunk("hello "), 6, root), (e: InstanceType<typeof up.UploadError>) => e.status === 409 && e.offset === 6);
   // Starting again (the recorder restarted) is the same upload.
-  assert.equal((await up.startUpload(db, id, { device: "Nathan's MacBook Pro", startedAt: "2026-10-22T18:00:00Z", format: "opus" }, null, root))!.offset, 6);
+  assert.equal((await up.startUpload(db, id, { device: "Alex's MacBook Pro", startedAt: "2026-10-22T18:00:00Z", format: "opus" }, null, root))!.offset, 6);
   await up.appendUpload(db, id, 6, chunk("world"), 5, root);
   await assert.rejects(up.finishUpload(db, id, { bytes: 99, durationSecs: 60 }, root), (e: InstanceType<typeof up.UploadError>) => e.status === 409);
   const done = await up.finishUpload(db, id, { bytes: 11, durationSecs: 60, title: "Pricing sync" }, root);
   assert.equal(done!.status, "completed");
 
   const [u] = await db.select().from(core!.uploads).where(sql`id = ${id}`);
-  assert.equal(u.device, "nathans-macbook-pro");
-  assert.match(u.folder, /^nathans-macbook-pro\/2026-10-22_\d\d-00-00_3b8f1c2a$/);
+  assert.equal(u.device, "alexs-macbook-pro");
+  assert.match(u.folder, /^alexs-macbook-pro\/2026-10-22_\d\d-00-00_3b8f1c2a$/);
   assert.equal(fs.readFileSync(path.join(root, u.folder, "audio.opus"), "utf8"), "hello world");
   const meta = JSON.parse(fs.readFileSync(path.join(root, u.folder, "metadata.json"), "utf8"));
   assert.deepEqual([meta.status, meta.created_at, meta.meeting_name, meta.duration_seconds], ["completed", "2026-10-22T18:00:00.000Z", "Pricing sync", 60]);
   // The device shows up, untagged.
-  const dev = (await core!.listDevices(db)).find((d) => d.name === "nathans-macbook-pro");
+  const dev = (await core!.listDevices(db)).find((d) => d.name === "alexs-macbook-pro");
   assert.equal(dev?.context, null);
   fs.rmSync(root, { recursive: true });
 });
@@ -158,21 +158,21 @@ test("a device's context applies only once set, and a calendar event wins over i
     .returning();
   const [t] = await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Roadmap for the side project." }).returning();
   assert.equal((await core!.getMeeting(db, t.id))!.context, null);
-  await core!.setDeviceRule(db, "home-pc", { context: "pwnbook", defaultDestination: "linear" });
+  await core!.setDeviceRule(db, "home-pc", { context: "lumen", defaultDestination: "linear" });
   const m = await core!.getMeeting(db, t.id);
-  assert.equal(m!.context, "pwnbook");
+  assert.equal(m!.context, "lumen");
   assert.equal(m!.defaultDestination, "linear");
-  assert.deepEqual((await core!.listMeetings(db, { context: "pwnbook" })).map((x) => x.id), [t.id]);
-  assert.ok((await core!.listContexts(db)).includes("pwnbook"));
+  assert.deepEqual((await core!.listMeetings(db, { context: "lumen" })).map((x) => x.id), [t.id]);
+  assert.ok((await core!.listContexts(db)).includes("lumen"));
   const [task] = await core!.saveExtractedTasks(db, t.id, [{ description: "Draft the roadmap" }]);
-  assert.deepEqual([task.context, task.destination], ["pwnbook", "linear"]);
-  // A device rule never overrides a calendar: the same device, now with an ironclad event over the recording.
+  assert.deepEqual([task.context, task.destination], ["lumen", "linear"]);
+  // A device rule never overrides a calendar: the same device, now with an acme event over the recording.
   const [ev] = await db
     .insert(core!.calendarEvents)
     .values({ source: "ics", externalId: "c", calendarId, title: "Vendor call", startAt: new Date("2026-10-23T02:00:00Z"), endAt: new Date("2026-10-23T02:10:00Z") })
     .returning();
   await core!.linkTranscript(db, t.id, ev.id);
-  assert.equal((await core!.getMeeting(db, t.id))!.context, "ironclad");
+  assert.equal((await core!.getMeeting(db, t.id))!.context, "acme");
 });
 
 test("the Slack message carries the summary and each action item's details", { skip }, async () => {

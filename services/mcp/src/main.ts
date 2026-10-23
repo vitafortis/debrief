@@ -81,7 +81,7 @@ function build() {
     { name: "debrief", version: "0.1.0" },
     {
       instructions:
-        "Debrief holds the user's meeting transcripts, matched to their calendar events. Calendar contexts split work (e.g. ironclad) from side projects (e.g. pwnbook). To capture follow-ups: read a meeting with extract_tasks, then save what you find with save_tasks; the user reviews them in Debrief, or you can send them with push_task.",
+        "Debrief holds the user's meeting transcripts, matched to their calendar events. Calendar contexts split work (e.g. acme) from side projects (e.g. lumen). To capture follow-ups: read a meeting with extract_tasks, then save what you find with save_tasks; the user reviews them in Debrief, or you can send them with push_task.",
     }
   );
   const wrap =
@@ -104,7 +104,7 @@ function build() {
         query: z.string().min(1).describe("What to look for"),
         date_from: z.string().optional().describe("YYYY-MM-DD, inclusive"),
         date_to: z.string().optional().describe("YYYY-MM-DD, inclusive"),
-        calendar: z.string().optional().describe("A calendar context, e.g. ironclad or pwnbook"),
+        calendar: z.string().optional().describe("A calendar context, e.g. acme or lumen"),
         limit: z.number().int().min(1).max(50).optional(),
       },
       annotations: { readOnlyHint: true },
@@ -141,7 +141,7 @@ function build() {
       description: "Meetings recorded in the last few days, newest first, with their summaries and how many tasks are still open.",
       inputSchema: {
         days: z.number().int().min(1).max(90).optional().describe("How far back (default 7)"),
-        calendar: z.string().optional().describe("A calendar context, e.g. ironclad or pwnbook"),
+        calendar: z.string().optional().describe("A calendar context, e.g. acme or lumen"),
       },
       annotations: { readOnlyHint: true },
     },

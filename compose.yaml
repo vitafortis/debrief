@@ -1,4 +1,4 @@
-# Debrief on the HP: Postgres on local disk, the recordings and notes on the
+# Debrief: Postgres on local disk, the recordings and notes on the
 # NAS (AUDIO_PATH and EXPORTS_PATH, default /mnt/meetings/…), everything else
 # stateless. Copy .env.example to .env and fill it in. Traefik labels assume
 # an external "traefik" network; sign-in is Authentik over OpenID Connect,
@@ -8,7 +8,7 @@ name: debrief
 # Settings the app's services share.
 x-app-env: &app-env
   DATABASE_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
-  PUBLIC_URL: https://${DEBRIEF_HOST:-debrief.armgrp.dev}
+  PUBLIC_URL: https://${DEBRIEF_HOST:-debrief.example.com}
   TZ: ${TZ:-America/New_York}
   AKIFLOW_WEBHOOK_URL: ${AKIFLOW_WEBHOOK_URL:-}
   AKIFLOW_DEFAULT_DURATION: ${AKIFLOW_DEFAULT_DURATION:-30}
@@ -53,7 +53,7 @@ services:
     environment:
       POSTGRES_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
       WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
-      DEVICE: ${WHISPER_DEVICE:-cpu} # cuda once the T4 is in; see README, "A GPU later"
+      DEVICE: ${WHISPER_DEVICE:-cpu} # cuda with a GPU; see README, "A GPU later"
       HF_TOKEN: ${HF_TOKEN:-}
       DIARIZE: ${DIARIZE:-}
       COMPUTE_TYPE: ${COMPUTE_TYPE:-}
@@ -101,7 +101,7 @@ services:
     environment:
       <<: *app-env
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
-      AUTH_URL: https://${DEBRIEF_HOST:-debrief.armgrp.dev}
+      AUTH_URL: https://${DEBRIEF_HOST:-debrief.example.com}
       AUTH_OIDC_ISSUER: ${AUTH_OIDC_ISSUER:-}
       AUTH_OIDC_ID: ${AUTH_OIDC_ID:-}
       AUTH_OIDC_SECRET: ${AUTH_OIDC_SECRET:-}
@@ -117,7 +117,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik
-      - traefik.http.routers.debrief.rule=Host(`${DEBRIEF_HOST:-debrief.armgrp.dev}`)
+      - traefik.http.routers.debrief.rule=Host(`${DEBRIEF_HOST:-debrief.example.com}`)
       - traefik.http.routers.debrief.entrypoints=websecure
       - traefik.http.routers.debrief.tls=true
       - traefik.http.services.debrief.loadbalancer.server.port=3000
@@ -138,7 +138,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik
-      - traefik.http.routers.debrief-mcp.rule=Host(`${DEBRIEF_HOST:-debrief.armgrp.dev}`) && PathPrefix(`/mcp`)
+      - traefik.http.routers.debrief-mcp.rule=Host(`${DEBRIEF_HOST:-debrief.example.com}`) && PathPrefix(`/mcp`)
       - traefik.http.routers.debrief-mcp.entrypoints=websecure
       - traefik.http.routers.debrief-mcp.tls=true
       - traefik.http.services.debrief-mcp.loadbalancer.server.port=3001

@@ -35,7 +35,7 @@ export default async function SettingsPage() {
     listDevices(d),
     listContexts(d),
   ]);
-  const publicUrl = (process.env.PUBLIC_URL ?? "https://debrief.armgrp.dev").replace(/\/$/, "");
+  const publicUrl = (process.env.PUBLIC_URL ?? "https://debrief.example.com").replace(/\/$/, "");
   const i = integrationStatus();
   const counts = Object.fromEntries(queue.map((q) => [q.status, q.n]));
   const lastSync = cals.map((c) => c.lastSyncedAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0];

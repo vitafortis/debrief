@@ -237,8 +237,8 @@ export async function storeEvents(db: Db, calendar: { id: string; source: string
 }
 
 /**
- * Adds calendars named in GOOGLE_CALENDARS ("ironclad:work@example.com,
- * pwnbook:primary") and ICS_CALENDARS ("pwnbook:https://…"), and any in the
+ * Adds calendars named in GOOGLE_CALENDARS ("acme:work@example.com,
+ * lumen:primary") and ICS_CALENDARS ("lumen:https://…"), and any in the
  * Google account's list (switched off until enabled in Settings).
  */
 export async function registerConfiguredCalendars(db: Db) {

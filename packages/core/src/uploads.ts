@@ -43,7 +43,7 @@ export class UploadError extends Error {
 
 export const audioRoot = () => path.resolve(/*turbopackIgnore: true*/ process.env.AUDIO_DIR ?? "/mnt/meetings/audio");
 
-/** "Nathan's MacBook Pro" -> "nathans-macbook-pro": the folder (and device) name. */
+/** "Alex's MacBook Pro" -> "alexs-macbook-pro": the folder (and device) name. */
 export function deviceSlug(name: string) {
   const s = name
     .normalize("NFKD")

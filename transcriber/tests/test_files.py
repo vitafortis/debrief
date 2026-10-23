@@ -65,5 +65,5 @@ def test_start_time_from_names_and_mtime():
 
 def test_a_recorder_folder_names_its_device(tmp_path):
     # What the upload API writes: <device>/<start>_<id>/audio.opus
-    assert device_for("nathans-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") == "nathans-macbook-pro"
-    assert meeting_name("nathans-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") is None
+    assert device_for("alexs-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") == "alexs-macbook-pro"
+    assert meeting_name("alexs-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") is None

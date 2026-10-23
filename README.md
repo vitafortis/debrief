@@ -50,7 +50,7 @@ Claude (MCP, API key)       ─────────────────�
 2. **Streaming up.** The recording goes to Debrief in chunks while the meeting runs, through your reverse proxy with an API key, so it works away from home too. It's written to disk first: if the connection drops, recording carries on and the upload resumes where it stopped. The server writes it into the recordings folder on the NAS (`audio/<device>/<start>_<id>/audio.opus`), where the full audio stays, so a meeting can always be replayed or transcribed again.
 3. **Transcribing.** Every 30 seconds the **transcriber** scans the recordings folder. It picks up a recording once it's finished: the recorder (or Meetily) marks it `completed`, or a plain file stops growing for a minute. faster-whisper transcribes it; with a Hugging Face token, pyannote also labels who is speaking. The transcript goes to Postgres, with a copy in `exports/YYYY-MM-DD/` as `.txt` and `.json`.
 4. **Matching.** **calendar-sync** links each new transcript to the calendar event it overlaps. Overlap is measured against the shorter of the two and 70% is enough, so joining late or leaving early still matches; a recording that spans two back-to-back meetings links to both.
-5. **Contexts.** Each calendar has a **context**, such as `ironclad` for work and `pwnbook` for the side project. It filters every page and sets where that calendar's tasks go by default. A meeting with no calendar event can take its context from the device it was recorded on, if you set one for that device.
+5. **Contexts.** Each calendar has a **context**, such as `acme` for work and `lumen` for the side project. It filters every page and sets where that calendar's tasks go by default. A meeting with no calendar event can take its context from the device it was recorded on, if you set one for that device.
 6. **Summary and action items.** With an Anthropic API key, Claude summarizes each new meeting and pulls out its action items as soon as it's matched. (Or ask Claude to, through MCP.) The summary, action items and transcript are written to `exports/` as a `.notes.md`, and posted to Slack.
 7. **Follow-up.** You review the action items in Debrief, then send them to Akiflow or Linear.
 
@@ -97,7 +97,7 @@ Rough speed for `large-v3` on CPU: 5–10 minutes per hour of audio on a dual Xe
 
 ## Getting started
 
-The examples use the setup Debrief was built for: an Unraid NAS, an HP server running Docker with Traefik, Authentik for sign-in, and `debrief.armgrp.dev` as the address. Swap in your own.
+The examples use an Unraid NAS, a Linux server running Docker with Traefik, Authentik for sign-in, and `debrief.example.com` as the address. Swap in your own.
 
 ### 1. Share a folder from the NAS
 
@@ -138,7 +138,7 @@ Then edit `.env`:
 | Setting | Value |
 |---|---|
 | `DB_PASSWORD`, `AUTH_SECRET` | The values generated above |
-| `DEBRIEF_HOST` | The hostname Traefik serves Debrief on, e.g. `debrief.armgrp.dev` |
+| `DEBRIEF_HOST` | The hostname Traefik serves Debrief on, e.g. `debrief.example.com` |
 | `TZ` | Your time zone, e.g. `America/New_York`. Meetings are shown in it, and it's used to read timestamps in file names |
 | `MEETINGS_UID` / `MEETINGS_GID` | The share's owner: `99` / `100` on Unraid. The transcriber, web (which writes uploads) and calendar-sync (which writes notes) run as this user |
 | `AUDIO_PATH` / `EXPORTS_PATH` | Only if the share isn't at `/mnt/meetings/audio` and `/mnt/meetings/exports` on the server |
@@ -167,13 +167,13 @@ Plain `docker compose` then uses both files. Put an HTTPS proxy in front before 
 
 1. In Authentik, open **Applications → Providers → Create** and make an *OAuth2/OpenID Provider*:
    - **Client type:** Confidential
-   - **Redirect URIs:** `https://debrief.armgrp.dev/api/auth/callback/oidc`
+   - **Redirect URIs:** `https://debrief.example.com/api/auth/callback/oidc`
    - **Scopes:** the default `openid`, `email` and `profile` mappings
 2. Create an **Application** that uses this provider, with the slug `debrief`, and grant access to your user or group.
 3. In `.env`, set:
 
    ```sh
-   AUTH_OIDC_ISSUER=https://auth.armgrp.dev/application/o/debrief/
+   AUTH_OIDC_ISSUER=https://auth.example.com/application/o/debrief/
    AUTH_OIDC_ID=<client id>
    AUTH_OIDC_SECRET=<client secret>
    ALLOWED_EMAILS=you@example.com     # optional: only these addresses get in
@@ -186,7 +186,7 @@ Plain `docker compose` then uses both files. Put an HTTPS proxy in front before 
 
 ### 6. Connect your calendars
 
-You can do this now or later in **Settings → Calendars**. Each calendar gets a **context**: one short word, like `ironclad` or `pwnbook`.
+You can do this now or later in **Settings → Calendars**. Each calendar gets a **context**: one short word, like `acme` or `lumen`.
 
 **Google Calendar.** Use either a service account or your own account.
 
@@ -197,7 +197,7 @@ You can do this now or later in **Settings → Calendars**. Each calendar gets a
   4. List the calendars in `.env` as `context:calendar-id`. The calendar ID is under **Integrate calendar**; for your main calendar it's your email address.
 
      ```sh
-     GOOGLE_CALENDARS=ironclad:you@ironclad.example,pwnbook:you@gmail.com
+     GOOGLE_CALENDARS=acme:you@acme.example,lumen:you@gmail.com
      ```
 
 - **Your own Google account.** This can read every calendar you can see.
@@ -208,7 +208,7 @@ You can do this now or later in **Settings → Calendars**. Each calendar gets a
 **An ICS feed** (Outlook, iCloud, or a Google calendar you can't share). Copy the calendar's secret iCal / ICS link and add it:
 
 ```sh
-ICS_CALENDARS=ironclad:https://outlook.office365.com/owa/calendar/…/calendar.ics
+ICS_CALENDARS=acme:https://outlook.office365.com/owa/calendar/…/calendar.ics
 ```
 
 ### 7. Turn on speaker labels (optional)
@@ -235,22 +235,22 @@ Without it, transcripts work the same but every line is unattributed.
     "duration": 30,
     "priority": "high",
     "due_date": "2026-10-25",
-    "description": "From Standup 10/22 — Sarah mentioned API v2 timeline may slip\nhttps://debrief.armgrp.dev/meetings/…?t=125",
-    "context": "ironclad",
+    "description": "From Standup 10/22 — Sarah mentioned API v2 timeline may slip\nhttps://debrief.example.com/meetings/…?t=125",
+    "context": "acme",
     "uniqueIdentifier": "debrief-<meeting id>-1"
   }
   ```
 
 - **Linear.**
   1. Create a personal API key under Settings → Security & access and set `LINEAR_API_KEY`.
-  2. Set `LINEAR_TEAM` to a team key (e.g. `ENG`), or `LINEAR_TEAMS=ironclad:ENG,pwnbook:PWN` to pick the team by context.
+  2. Set `LINEAR_TEAM` to a team key (e.g. `ENG`), or `LINEAR_TEAMS=acme:ENG,lumen:LUM` to pick the team by context.
 
 Each calendar has a default destination (Settings → Calendars → *Tasks go to*), and you can change it on any task.
 
 - **Automatic summaries.** Set `ANTHROPIC_API_KEY`. Each new meeting is then summarized, and its action items found, as soon as it's transcribed and matched to its event (`AUTO_EXTRACT=false` to only do it from the button on a meeting). `ANTHROPIC_MODEL` picks the model.
 - **Slack.**
   1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) (*From scratch*), open **Incoming Webhooks**, turn them on, and **Add New Webhook to Workspace** for the channel you want.
-  2. Set `SLACK_WEBHOOK_URL=https://hooks.slack.com/services/…`. For a channel per context, use `SLACK_WEBHOOKS=ironclad:https://hooks.slack.com/…,pwnbook:https://hooks.slack.com/…` (a context without one falls back to `SLACK_WEBHOOK_URL`).
+  2. Set `SLACK_WEBHOOK_URL=https://hooks.slack.com/services/…`. For a channel per context, use `SLACK_WEBHOOKS=acme:https://hooks.slack.com/…,lumen:https://hooks.slack.com/…` (a context without one falls back to `SLACK_WEBHOOK_URL`).
 
   Once a meeting has its summary, Slack gets the title, time, length and attendees, the summary, and every action item with its details, owner, due date, priority, destination and a link to the moment it was said. Each meeting is posted once; **Slack → Send again** on a meeting page posts it again.
 
@@ -262,7 +262,7 @@ docker compose ps                 # all five services should be running
 docker compose logs -f web        # "Migrations applied.", then "Ready"
 ```
 
-Open `https://debrief.armgrp.dev` and sign in. Then check **Settings → Services**:
+Open `https://debrief.example.com` and sign in. Then check **Settings → Services**:
 
 - **Calendar sync** shows when it last synced, or the error from Google.
 - **Claude in the app** and **Slack** show whether they're set up.
@@ -287,7 +287,7 @@ docker compose logs -f transcriber   # "New recording", "Transcribing…", "Done
    - **Mac:** open the `.dmg` and drag **Debrief Recorder** to Applications. It isn't signed yet, so the first time, right-click it → **Open** → **Open**. (If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/Debrief Recorder.app"`.)
    - **Windows:** run the installer. SmartScreen warns about an unsigned app: **More info → Run anyway**.
 3. It opens its Settings window the first time (later: the waveform icon in the menu bar or tray → **Settings…**):
-   - **Server:** `https://debrief.armgrp.dev`. Optionally a **fallback server** for when the first can't be reached, such as `http://192.168.1.20:3000` at home.
+   - **Server:** `https://debrief.example.com`. Optionally a **fallback server** for when the first can't be reached, such as `http://192.168.1.20:3000` at home.
    - **API key:** the one from step 1.
    - **This computer's name:** how it shows up in Debrief (defaults to the computer's name).
    - **Test connection**, then **Save**.
@@ -296,7 +296,7 @@ docker compose logs -f transcriber   # "New recording", "Transcribing…", "Done
    - **Windows:** microphone access for desktop apps (Settings → Privacy & security → Microphone).
 5. **Record a test call.** Join any call, answer **Record** in the popup, and hang up. A minute or two later it's on the dashboard: *Queued*, then *Transcribing*, then *Ready*.
 
-From outside your network the recorder only needs your reverse proxy to pass `https://debrief.armgrp.dev/api/recorder/…` to the `web` container, which the Traefik labels in `compose.yaml` already do. Those routes check the API key themselves, so they work with sign-in on. If a forward-auth middleware (Authentik outpost) guards the whole host, exempt `PathPrefix(`/api/recorder`)` and `PathPrefix(`/mcp`)` from it.
+From outside your network the recorder only needs your reverse proxy to pass `https://debrief.example.com/api/recorder/…` to the `web` container, which the Traefik labels in `compose.yaml` already do. Those routes check the API key themselves, so they work with sign-in on. If a forward-auth middleware (Authentik outpost) guards the whole host, exempt `PathPrefix(`/api/recorder`)` and `PathPrefix(`/mcp`)` from it.
 
 **With Meetily and Syncthing instead.**
 
@@ -330,7 +330,7 @@ From outside your network the recorder only needs your reverse proxy to pass `ht
 
 ### The sidebar and calendar filter
 
-Under **Calendars** in the sidebar, pick a context (e.g. *Ironclad*) to narrow every page to it: the dashboard, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
+Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the dashboard, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
 
 ### A meeting
 
@@ -435,16 +435,16 @@ Use the arrows and **Today** to move around, and click a day's header for the da
 
 **Copies on the computer.** Recordings stay in the recordings folder (Settings → *On this computer*) for 14 days after they're uploaded, then they're deleted; 0 deletes them as soon as Debrief has them. The NAS keeps the original.
 
-**Settings** are stored in `~/Library/Application Support/dev.armgrp.debrief.recorder/settings.json` (Mac) or `%APPDATA%\dev.armgrp.debrief.recorder\settings.json` (Windows), readable only by you, API key included. Logs are in `~/Library/Logs/dev.armgrp.debrief.recorder/` or `%LOCALAPPDATA%\dev.armgrp.debrief.recorder\logs\`.
+**Settings** are stored in `~/Library/Application Support/io.github.vitafortis.debrief.recorder/settings.json` (Mac) or `%APPDATA%\io.github.vitafortis.debrief.recorder\settings.json` (Windows), readable only by you, API key included. Logs are in `~/Library/Logs/io.github.vitafortis.debrief.recorder/` or `%LOCALAPPDATA%\io.github.vitafortis.debrief.recorder\logs\`.
 
 ## Connecting Claude
 
-The MCP server runs at `https://debrief.armgrp.dev/mcp`. It sits on the same host as the app but on its own Traefik route without SSO, and authenticates every request with a bearer token: an API key from **Settings → API keys** (make one per Claude client), or `MCP_TOKEN` if you set one.
+The MCP server runs at `https://debrief.example.com/mcp`. It sits on the same host as the app but on its own Traefik route without SSO, and authenticates every request with a bearer token: an API key from **Settings → API keys** (make one per Claude client), or `MCP_TOKEN` if you set one.
 
 **Claude Code:**
 
 ```sh
-claude mcp add --transport http debrief https://debrief.armgrp.dev/mcp \
+claude mcp add --transport http debrief https://debrief.example.com/mcp \
   --header "Authorization: Bearer <API key>"
 ```
 
@@ -455,7 +455,7 @@ claude mcp add --transport http debrief https://debrief.armgrp.dev/mcp \
   "mcpServers": {
     "debrief": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://debrief.armgrp.dev/mcp", "--header", "Authorization: Bearer <API key>"]
+      "args": ["-y", "mcp-remote", "https://debrief.example.com/mcp", "--header", "Authorization: Bearer <API key>"]
     }
   }
 }
@@ -465,7 +465,7 @@ claude mcp add --transport http debrief https://debrief.armgrp.dev/mcp \
 - *"What did I agree to do in meetings this week?"*
 - *"Extract the action items from the Northwind onboarding call and save them."*
 - *"Search my meetings for anything about the API v2 timeline."*
-- *"Send the approved pwnbook tasks to Linear."*
+- *"Send the approved lumen tasks to Linear."*
 
 **Tools:**
 
@@ -542,7 +542,7 @@ Everything is set through environment variables in `.env`; [`.env.example`](.env
 | `ABANDON_HOURS` | transcriber | `12` | A recording still marked as in progress is transcribed anyway once it hasn't changed for this long |
 | `AUDIO_PATH` / `EXPORTS_PATH` | compose | `/mnt/meetings/audio` / `…/exports` | Where on the server the recordings and notes live |
 | `AUTO_EXTRACT` | calendar-sync | `true` | Summarize each new meeting when `ANTHROPIC_API_KEY` is set |
-| `SLACK_WEBHOOK_URL` / `SLACK_WEBHOOKS` | calendar-sync, web | — | Slack incoming webhook, or one per context (`ironclad:https://…,pwnbook:https://…`) |
+| `SLACK_WEBHOOK_URL` / `SLACK_WEBHOOKS` | calendar-sync, web | — | Slack incoming webhook, or one per context (`acme:https://…,lumen:https://…`) |
 | `MCP_TOKEN` | mcp-server | — | An extra fixed bearer token for Claude, besides the API keys made in Settings |
 | `DIARIZE` | transcriber | on when `HF_TOKEN` is set | Speaker labels on or off |
 | `SYNC_DAYS_BACK` / `SYNC_DAYS_AHEAD` | calendar-sync | `30` / `14` | The window of events kept in sync |
