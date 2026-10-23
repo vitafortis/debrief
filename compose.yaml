@@ -34,6 +34,13 @@ services:
       WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
       DEVICE: ${WHISPER_DEVICE:-cpu} # cuda once the T4 is in; see README, "A GPU later"
       HF_TOKEN: ${HF_TOKEN:-}
+      DIARIZE: ${DIARIZE:-}
+      COMPUTE_TYPE: ${COMPUTE_TYPE:-}
+      CPU_THREADS: ${CPU_THREADS:-0}
+      LANGUAGE: ${LANGUAGE:-}
+      BEAM_SIZE: ${BEAM_SIZE:-5}
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-30}
+      STABLE_SECONDS: ${STABLE_SECONDS:-60}
       TZ: ${TZ:-America/New_York}
     depends_on:
       postgres:
@@ -47,7 +54,10 @@ services:
       GOOGLE_CREDENTIALS_FILE: /run/secrets/google-creds.json
       GOOGLE_CALENDARS: ${GOOGLE_CALENDARS:-}
       ICS_CALENDARS: ${ICS_CALENDARS:-}
-      POLL_INTERVAL_SECONDS: 300
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
+      SYNC_DAYS_BACK: ${SYNC_DAYS_BACK:-30}
+      SYNC_DAYS_AHEAD: ${SYNC_DAYS_AHEAD:-14}
+      MATCH_THRESHOLD: ${MATCH_THRESHOLD:-0.7}
       TZ: ${TZ:-America/New_York}
     secrets:
       - google-creds.json
@@ -69,6 +79,12 @@ services:
       LINEAR_TEAM: ${LINEAR_TEAM:-}
       LINEAR_TEAMS: ${LINEAR_TEAMS:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      AKIFLOW_DEFAULT_DURATION: ${AKIFLOW_DEFAULT_DURATION:-30}
+      MATCH_THRESHOLD: ${MATCH_THRESHOLD:-0.7}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
+      AUTH_MODE: ${AUTH_MODE:-}
+      AUTH_OIDC_NAME: ${AUTH_OIDC_NAME:-Authentik}
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
       AUTH_URL: https://${DEBRIEF_HOST:-debrief.armgrp.dev}
       AUTH_OIDC_ISSUER: ${AUTH_OIDC_ISSUER:-}
@@ -80,6 +96,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Without Traefik: uncomment, and drop the traefik network and labels.
+    # ports: ["3000:3000"]
     networks: [default, traefik]
     labels:
       - traefik.enable=true
@@ -98,6 +116,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Without Traefik: uncomment (Claude then connects to http://<host>:3001/mcp).
+    # ports: ["3001:3001"]
     networks: [default, traefik]
     # Same host, /mcp: Claude authenticates with MCP_TOKEN, so no SSO in front of it.
     labels:
