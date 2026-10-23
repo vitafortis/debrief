@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth, authMode } from "@/lib/auth";
 
-const PUBLIC = ["/login", "/api/auth", "/api/health"];
+// /api/recorder checks its own API key.
+const PUBLIC = ["/login", "/api/auth", "/api/health", "/api/recorder"];
 
 export default auth((req) => {
   if (authMode() === "none") return NextResponse.next();

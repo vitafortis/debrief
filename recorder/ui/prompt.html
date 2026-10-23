@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Debrief Recorder</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; }
+      body { padding: 6px; }
+      .pop { height: 100%; padding: 14px 14px 12px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 10px; }
+      .top { display: flex; gap: 10px; align-items: flex-start; }
+      .top img { width: 28px; height: 28px; flex: none; }
+      .actions { display: flex; gap: 6px; margin-top: auto; }
+      .actions .btn { flex: 1; }
+      .more { display: flex; gap: 12px; justify-content: center; font-size: 11.5px; }
+      .bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+      .bar i { display: block; height: 100%; background: var(--primary); width: 100%; transition: width 1s linear; }
+    </style>
+  </head>
+  <body>
+    <div class="card pop" data-tauri-drag-region>
+      <div class="top" data-tauri-drag-region>
+        <img src="icon.png" alt="" />
+        <div class="grow" data-tauri-drag-region>
+          <h2 id="title">Record this meeting?</h2>
+          <p class="muted small" id="message"></p>
+        </div>
+      </div>
+      <div id="start-ui">
+        <input class="input" id="name" placeholder="Name it (optional; the calendar usually does)" spellcheck="false" />
+      </div>
+      <div class="actions" id="buttons"></div>
+      <div class="more" id="more"></div>
+      <div class="bar"><i id="bar"></i></div>
+    </div>
+    <script src="prompt.js"></script>
+  </body>
+</html>

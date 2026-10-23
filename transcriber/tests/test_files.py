@@ -61,3 +61,9 @@ def test_start_time_from_names_and_mtime():
     # No name: the file finished writing at mtime, so it started one length earlier.
     end = datetime(2026, 10, 22, 20, 0, tzinfo=timezone.utc).timestamp()
     assert recorded_at(found("call.wav", end), None, 1800, CHI) == datetime(2026, 10, 22, 19, 30, tzinfo=timezone.utc)
+
+
+def test_a_recorder_folder_names_its_device(tmp_path):
+    # What the upload API writes: <device>/<start>_<id>/audio.opus
+    assert device_for("nathans-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") == "nathans-macbook-pro"
+    assert meeting_name("nathans-macbook-pro/2026-10-22_14-00-00_3b8f1c2a/audio.opus") is None

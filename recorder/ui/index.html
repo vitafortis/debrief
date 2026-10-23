@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Debrief Recorder</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      body { padding: 18px; }
+      header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+      header img { width: 30px; height: 30px; }
+      main > .card + .card { margin-top: 12px; }
+      .rules > div { display: grid; grid-template-columns: minmax(0, 1fr) 138px 26px; gap: 6px; align-items: center; }
+      .rules > div + div { margin-top: 6px; }
+      footer { position: sticky; bottom: -18px; margin: 14px -18px -18px; padding: 12px 18px; display: flex; gap: 8px; align-items: center;
+        background: color-mix(in oklch, var(--background) 88%, transparent); backdrop-filter: blur(8px); border-top: 1px solid var(--border); }
+      .now { display: flex; flex-wrap: wrap; gap: 6px; }
+      .now .btn { height: 22px; font-size: 11.5px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="icon.png" alt="" />
+      <div class="grow">
+        <h1>Debrief Recorder</h1>
+        <p class="muted small">Records meetings on this computer and sends them to Debrief.</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <div class="section stack">
+          <div class="row">
+            <span class="dot" id="rec-dot"></span>
+            <div class="grow">
+              <h2 id="rec-title">Not recording</h2>
+              <p class="muted small" id="rec-sub">It starts when a meeting app uses the microphone, by the rules below.</p>
+            </div>
+            <button class="btn btn-sm" id="rec-toggle">Start recording</button>
+          </div>
+          <div class="grid2" id="meters" hidden>
+            <div><p class="muted small">You (microphone)</p><div class="meter"><i id="m-mic"></i></div></div>
+            <div><p class="muted small">The call (computer audio)</p><div class="meter"><i id="m-sys"></i></div></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="row">
+            <span class="dot" id="up-dot"></span>
+            <p class="grow small" id="up-text">Not connected yet.</p>
+            <button class="btn btn-ghost btn-sm" id="open-folder">Recordings folder</button>
+          </div>
+          <div class="list small" id="recent" style="margin-top: 6px"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section stack">
+          <h2>Debrief</h2>
+          <label class="field"><span>Server</span><input class="input" id="server_url" placeholder="https://debrief.armgrp.dev" spellcheck="false" /></label>
+          <label class="field"
+            ><span>Fallback server (optional) — tried when the first can't be reached, e.g. a LAN address at home</span
+            ><input class="input" id="fallback_url" placeholder="http://debrief.lan:3000" spellcheck="false"
+          /></label>
+          <label class="field"
+            ><span>API key — Debrief → Settings → API keys</span>
+            <div class="row"><input class="input mono" id="api_key" type="password" placeholder="dbk_…" spellcheck="false" /><button class="btn btn-sm" id="show-key" type="button">Show</button></div>
+          </label>
+          <label class="field"
+            ><span>This computer's name in Debrief (tag it by context there, under Devices)</span><input class="input" id="device_name" spellcheck="false"
+          /></label>
+          <div class="row">
+            <button class="btn btn-sm" id="test">Test connection</button>
+            <p class="small grow" id="test-result"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section stack">
+          <div class="row">
+            <div class="grow">
+              <h2>When an app uses the microphone</h2>
+              <p class="muted small">Ask, record straight away, or leave it alone. Names match the app's name or bundle id.</p>
+            </div>
+            <label class="switch" title="Watch for meetings"><input type="checkbox" id="detect_meetings" /><span></span></label>
+          </div>
+          <div class="rules" id="rules"></div>
+          <div class="row">
+            <button class="btn btn-sm" id="add-rule">Add an app</button>
+            <span class="grow"></span>
+          </div>
+          <div class="row">
+            <p class="grow small">Any other app</p>
+            <div class="seg" id="default_action">
+              <button data-v="record">Record</button><button data-v="ask">Ask</button><button data-v="ignore">Ignore</button>
+            </div>
+          </div>
+          <div class="row">
+            <p class="grow small">Stop when the app has let go of the microphone for</p>
+            <input class="input num" id="stop_after_secs" type="number" min="5" max="600" /><span class="small muted">seconds</span>
+          </div>
+          <div id="now-wrap" hidden>
+            <p class="muted small" style="margin-bottom: 4px">Using the microphone now (click to add a rule):</p>
+            <div class="now" id="now"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section stack">
+          <h2>Audio</h2>
+          <label class="field"><span>Microphone</span><select class="input" id="microphone"></select></label>
+          <div class="row">
+            <div class="grow">
+              <p class="small">Record the computer's audio too</p>
+              <p class="muted small">The other side of the call. On a Mac, allow it under Privacy &amp; Security → Screen &amp; System Audio Recording.</p>
+            </div>
+            <label class="switch"><input type="checkbox" id="capture_system_audio" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section stack">
+          <h2>On this computer</h2>
+          <label class="field"><span>Recordings folder (empty for the default)</span><input class="input mono" id="recordings_dir" spellcheck="false" /></label>
+          <div class="row">
+            <p class="grow small">Keep a copy here after it's uploaded for</p>
+            <input class="input num" id="keep_local_days" type="number" min="0" max="365" /><span class="small muted">days</span>
+          </div>
+          <div class="row">
+            <p class="grow small">Open at login</p>
+            <label class="switch"><input type="checkbox" id="launch_at_login" /><span></span></label>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p class="small grow" id="saved"></p>
+      <button class="btn btn-primary" id="save">Save</button>
+    </footer>
+    <script src="settings.js"></script>
+  </body>
+</html>

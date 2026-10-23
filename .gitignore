@@ -16,3 +16,5 @@ __pycache__/
 secrets/
 next-env.d.ts
 *.tsbuildinfo
+recorder/src-tauri/target/
+recorder/src-tauri/gen/

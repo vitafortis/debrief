@@ -62,15 +62,16 @@ export async function searchTranscripts(db: Db, query: string, o: SearchOptions 
     ),
     hits as (
       select t.id, t.title, t.speaker_names, t.speaker_segments, t.content, r.title_hint, r.recorded_at, r.duration_secs,
-             e.title as event_title, c.context, ts_rank_cd(t.search_vector, q.query) as rank
+             e.title as event_title, coalesce(c.context, d.context) as context, ts_rank_cd(t.search_vector, q.query) as rank
       from transcripts t
       cross join q
       join recordings r on r.id = t.recording_id
       left join pe on pe.transcript_id = t.id
       left join calendar_events e on e.id = pe.event_id
       left join calendars c on c.id = e.calendar_id
+      left join devices d on d.name = r.device
       where t.search_vector @@ q.query
-        and (${o.context ?? null}::text is null or c.context = ${o.context ?? null})
+        and (${o.context ?? null}::text is null or coalesce(c.context, d.context) = ${o.context ?? null})
         and (${o.from?.toISOString() ?? null}::timestamptz is null or r.recorded_at >= ${o.from?.toISOString() ?? null})
         and (${o.to?.toISOString() ?? null}::timestamptz is null or r.recorded_at < ${o.to?.toISOString() ?? null})
       order by rank desc, r.recorded_at desc

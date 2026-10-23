@@ -3,13 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, gte, lte } from "drizzle-orm";
 import { ArrowLeft, Download, Video } from "lucide-react";
-import { calendarEvents, extractionAvailable, getMeeting, integrationStatus, listContexts } from "@debrief/core";
+import { calendarEvents, extractionAvailable, getMeeting, integrationStatus, listContexts, slackConfigured } from "@debrief/core";
 import { db } from "@/lib/db";
 import { fmtDateTime, fmtDay, fmtDuration, fmtTime } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { ContextBadge, StatusBadge } from "@/components/ui";
 import { MeetingPlayer } from "@/components/meeting-player";
-import { EventPicker, MeetingTasks, RetryButton, SpeakerEditor, SummaryEditor, TitleEditor } from "@/components/meeting-panels";
+import { EventPicker, MeetingTasks, RetryButton, SlackButton, SpeakerEditor, SummaryEditor, TitleEditor } from "@/components/meeting-panels";
 import { AutoRefresh } from "@/components/auto-refresh";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ t?: string; q?: string }> };
@@ -67,6 +67,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
               <a href={`/api/meetings/${m.transcript.id}/export?format=txt`} className="btn btn-ghost btn-sm">
                 Text
               </a>
+              {slackConfigured() && <SlackButton transcriptId={m.transcript.id} sentAt={m.transcript.notifiedAt?.toISOString() ?? null} />}
             </div>
           </div>
         </header>

@@ -2,7 +2,8 @@
  * The Debrief MCP server: lets Claude search and read meetings, save the
  * action items it finds, and send them to Akiflow or Linear.
  *
- * Streamable HTTP at /mcp, stateless, behind a bearer token (MCP_TOKEN).
+ * Streamable HTTP at /mcp, stateless, behind a bearer token: an API key
+ * from Settings, or MCP_TOKEN.
  */
 import crypto from "node:crypto";
 import http from "node:http";
@@ -15,6 +16,7 @@ import {
   PRIORITIES,
   TASK_DESTINATIONS,
   TASK_STATUSES,
+  bearer,
   createLinearIssue,
   getDb,
   getMeeting,
@@ -24,6 +26,7 @@ import {
   meetingBrief,
   meetingTitle,
   pushTask,
+  requestPublish,
   saveExtractedTasks,
   searchTranscripts,
   setTaskStatus,
@@ -31,6 +34,7 @@ import {
   transcriptText,
   transcripts,
   updateTask,
+  verifyApiKey,
   type Meeting,
 } from "@debrief/core";
 import { HL_END, HL_START } from "@debrief/core/search";
@@ -38,11 +42,9 @@ import { waitForSchema } from "@debrief/core/migrate";
 
 process.env.DATABASE_URL ||= process.env.POSTGRES_URL;
 const PORT = Number(process.env.PORT ?? 3151);
+// Claude sends a bearer token: an API key made in Settings, or MCP_TOKEN if set.
 const TOKEN = process.env.MCP_TOKEN ?? "";
-if (!TOKEN && process.env.MCP_ALLOW_NO_AUTH !== "true") {
-  console.error("Set MCP_TOKEN (any long random string; Claude sends it as a bearer token).");
-  process.exit(1);
-}
+const NO_AUTH = process.env.MCP_ALLOW_NO_AUTH === "true";
 
 const db = () => getDb();
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
@@ -249,6 +251,7 @@ function build() {
       const m = await meetingOr404(transcript_id);
       if (summary) await db().update(transcripts).set({ summary }).where(eq(transcripts.id, m.transcript.id));
       const rows = await saveExtractedTasks(db(), m.transcript.id, tasks);
+      if (summary || m.transcript.summary) await requestPublish(db(), m.transcript.id);
       return json({
         saved: rows.map((t) => ({ id: t.id, description: t.description, destination: t.destination })),
         reviewAt: link(m.transcript.id) ?? "the Tasks page in Debrief",
@@ -361,12 +364,16 @@ function build() {
   return server;
 }
 
-function authorized(req: http.IncomingMessage) {
-  if (!TOKEN) return true;
-  const got = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
-  const a = crypto.createHash("sha256").update(got).digest();
-  const b = crypto.createHash("sha256").update(TOKEN).digest();
-  return crypto.timingSafeEqual(a, b);
+async function authorized(req: http.IncomingMessage) {
+  if (NO_AUTH) return true;
+  const got = bearer(req.headers.authorization);
+  if (!got) return false;
+  if (TOKEN) {
+    const a = crypto.createHash("sha256").update(got).digest();
+    const b = crypto.createHash("sha256").update(TOKEN).digest();
+    if (crypto.timingSafeEqual(a, b)) return true;
+  }
+  return !!(await verifyApiKey(db(), got));
 }
 
 async function readBody(req: http.IncomingMessage) {
@@ -394,7 +401,7 @@ http
       res.writeHead(404).end();
       return;
     }
-    if (!authorized(req)) {
+    if (!(await authorized(req))) {
       res.writeHead(401, { "content-type": "application/json", "www-authenticate": "Bearer" }).end('{"error":"Missing or wrong bearer token"}');
       return;
     }

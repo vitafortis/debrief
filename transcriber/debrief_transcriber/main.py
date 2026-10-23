@@ -69,7 +69,11 @@ class Scanner:
     def ready(self, f: Found) -> tuple[bool, object]:
         meta = read_sidecar(f.path)
         if meta is not None:
-            return meta.finished, meta
+            # A recorder that died mid-meeting never says "completed": transcribe what arrived.
+            abandoned = not meta.finished and time.time() - f.mtime >= self.cfg.abandon_hours * 3600
+            if abandoned:
+                log.warning("%s still says it's recording but hasn't changed in %g h; transcribing what's there", f.rel, self.cfg.abandon_hours)
+            return meta.finished or abandoned, meta
         # No sidecar: wait until the file has stopped growing.
         stable = self.seen_sizes.get(f.rel) == f.size and time.time() - f.mtime >= self.cfg.stable_seconds
         self.seen_sizes[f.rel] = f.size

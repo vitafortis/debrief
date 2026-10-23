@@ -3,6 +3,7 @@ import type { Db } from "./db";
 import { getMeeting, type Meeting } from "./meetings";
 import { transcripts } from "./schema";
 import { saveExtractedTasks, taskInput } from "./tasks";
+import { requestPublish } from "./notes";
 import { z } from "zod";
 
 export function clock(secs: number) {
@@ -52,6 +53,8 @@ Leave out small talk, decisions with no follow-up, and things already done in th
 const extraction = z.object({ summary: z.string().max(4000), tasks: z.array(taskInput).max(50) });
 
 export const extractionAvailable = () => !!process.env.ANTHROPIC_API_KEY;
+/** Summarize every new transcript as soon as it's linked (AUTO_EXTRACT=false to only do it on request). */
+export const autoExtract = () => extractionAvailable() && process.env.AUTO_EXTRACT !== "false";
 
 /**
  * Has Claude (through the API) summarize a meeting and pull out its action
@@ -92,5 +95,6 @@ export async function extractWithClaude(db: Db, transcriptId: string) {
   const out = extraction.parse(call?.input);
   await db.update(transcripts).set({ summary: out.summary }).where(eq(transcripts.id, transcriptId));
   const saved = await saveExtractedTasks(db, transcriptId, out.tasks);
+  await requestPublish(db, transcriptId);
   return { summary: out.summary, tasks: saved };
 }

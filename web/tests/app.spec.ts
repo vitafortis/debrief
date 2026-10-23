@@ -27,6 +27,13 @@ test("API routes need a session", async ({ request }) => {
   expect((await request.get("/api/health")).status()).toBe(200);
 });
 
+test("the recorder API needs an API key, not a session", async ({ request }) => {
+  expect((await request.get("/api/recorder/ping")).status()).toBe(401);
+  expect((await request.get("/api/recorder/ping", { headers: { authorization: "Bearer dbk_made-up" } })).status()).toBe(401);
+  const put = await request.put("/api/recorder/recordings/3b8f1c2a-0000-4000-8000-0000000000e2", { data: { device: "x", startedAt: new Date().toISOString() } });
+  expect(put.status()).toBe(401);
+});
+
 test.describe("signed in", () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
@@ -144,5 +151,40 @@ test.describe("signed in", () => {
     await expect(page.locator("p", { hasText: /^Synced/ })).toHaveCount(2);
     await page.goto("/");
     await expect(page.getByRole("button", { name: "pwnbook" })).toBeVisible();
+  });
+
+  test("a key from Settings lets the recorder upload; then its device can be tagged and the key revoked", async ({ page, request }) => {
+    await page.goto("/settings");
+    await page.getByLabel("Key name").fill("E2E MacBook");
+    await page.getByRole("button", { name: "Create key" }).click();
+    const key = (await page.locator("code", { hasText: /^dbk_/ }).textContent())!.trim();
+    const auth = { authorization: `Bearer ${key}` };
+
+    const ping = await request.get("/api/recorder/ping?device=E2E%20Mac", { headers: auth });
+    expect(await ping.json()).toMatchObject({ ok: true, key: "E2E MacBook", device: "e2e-mac", context: null });
+    const id = crypto.randomUUID();
+    const base = `/api/recorder/recordings/${id}`;
+    const started = await request.put(base, { headers: auth, data: { device: "E2E Mac", startedAt: new Date().toISOString(), app: "zoom.us" } });
+    expect(await started.json()).toMatchObject({ status: "recording", offset: 0 });
+    const body = Buffer.from("OggS fake audio for the test");
+    expect(await (await request.patch(`${base}/audio`, { headers: { ...auth, "upload-offset": "0" }, data: body })).json()).toEqual({ offset: body.length });
+    const stale = await request.patch(`${base}/audio`, { headers: { ...auth, "upload-offset": "0" }, data: body });
+    expect(stale.status()).toBe(409);
+    expect((await stale.json()).offset).toBe(body.length);
+    const done = await request.post(`${base}/complete`, { headers: auth, data: { bytes: body.length, durationSecs: 3 } });
+    expect(await done.json()).toMatchObject({ status: "completed" });
+
+    await page.reload();
+    const ctx = page.getByLabel("Context for e2e-mac");
+    await expect(ctx).toHaveValue("");
+    await ctx.selectOption("pwnbook");
+    await expect(page.getByLabel("Tasks from e2e-mac go to")).toBeEnabled();
+    await page.reload();
+    await expect(page.getByLabel("Context for e2e-mac")).toHaveValue("pwnbook");
+
+    page.once("dialog", (d) => d.accept());
+    await page.locator("div", { hasText: /^E2E MacBook/ }).getByTitle("Revoke").click();
+    await expect(page.getByText("Key revoked.")).toBeVisible();
+    expect((await request.get("/api/recorder/ping", { headers: auth })).status()).toBe(401);
   });
 });

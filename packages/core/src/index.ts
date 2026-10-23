@@ -5,3 +5,5 @@ export * from "./meetings";
 export * from "./search";
 export * from "./tasks";
 export * from "./extract";
+export * from "./apikeys";
+export * from "./notes";

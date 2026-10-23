@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 // The production build against a throwaway database filled with the demo
@@ -26,7 +28,8 @@ export default defineConfig({
       OWNER_NAME: "Tester",
       TZ: "America/New_York",
       PUBLIC_URL: `http://localhost:${PORT}`,
-      AUDIO_DIR: "/nonexistent",
+      // Where the recorder upload test writes.
+      AUDIO_DIR: path.join(os.tmpdir(), "debrief-e2e-audio"),
     },
   },
 });

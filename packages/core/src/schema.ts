@@ -130,6 +130,7 @@ export const transcripts = pgTable(
     modelVersion: text("model_version"),
     processedAt: ts("processed_at").notNull().defaultNow(),
     tasksExtractedAt: ts("tasks_extracted_at"),
+    notifiedAt: ts("notified_at"), // when the summary went to Slack
     searchVector: tsvector("search_vector").generatedAlwaysAs(
       sql`to_tsvector('english', coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || content)`
     ),
@@ -185,3 +186,46 @@ export const tasks = pgTable(
     index("tasks_status").on(t.status),
   ]
 );
+
+/**
+ * A machine recordings come from: a Syncthing folder name or a recorder's
+ * device name. It tags nothing until a context is set here; a meeting's
+ * calendar event, when it has one, still wins.
+ */
+export const devices = pgTable("devices", {
+  name: text("name").primaryKey(), // the folder under the recordings root
+  context: text("context"),
+  defaultDestination: text("default_destination").$type<TaskDestination>(),
+  lastSeenAt: ts("last_seen_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/** Keys for the recorder and Claude (MCP). Only a hash is kept. */
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  prefix: text("prefix").notNull(), // the first characters, to tell keys apart
+  hash: text("hash").notNull().unique(),
+  lastUsedAt: ts("last_used_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const UPLOAD_STATUSES = ["recording", "completed"] as const;
+export type UploadStatus = (typeof UPLOAD_STATUSES)[number];
+
+/** A recording the desktop recorder is streaming up, written beside the synced ones. */
+export const uploads = pgTable("uploads", {
+  id: uuid("id").primaryKey(), // chosen by the recorder, so retries land on the same upload
+  device: text("device").notNull(),
+  folder: text("folder").notNull().unique(), // relative to the recordings root
+  fileName: text("file_name").notNull(),
+  bytes: bigint("bytes", { mode: "number" }).notNull().default(0),
+  startedAt: ts("started_at").notNull(),
+  title: text("title"),
+  app: text("app"), // what was using the microphone: "zoom.us", "Microsoft Teams"
+  status: text("status").$type<UploadStatus>().notNull().default("recording"),
+  durationSecs: real("duration_secs"),
+  apiKeyId: uuid("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});

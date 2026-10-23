@@ -1,10 +1,12 @@
 /**
  * calendar-sync: pulls calendar events every few minutes and links
  * transcripts to their meetings. Also wakes up when the transcriber finishes
- * a recording (to link it right away) and when "Sync now" is pressed.
+ * a recording (to link it, then have Claude summarize it when an API key is
+ * set), when a summary is saved (to write the notes file and tell Slack),
+ * and when "Sync now" is pressed.
  */
 import pg from "pg";
-import { closeDb, correlateTranscript, getDb } from "@debrief/core";
+import { autoExtract, closeDb, correlateTranscript, extractWithClaude, getDb, publishMeeting } from "@debrief/core";
 import { registerConfiguredCalendars, syncAllCalendars } from "@debrief/core/calendar-sync";
 import { waitForSchema } from "@debrief/core/migrate";
 
@@ -49,6 +51,7 @@ async function listen() {
   await client.connect();
   await client.query("LISTEN debrief_transcribed");
   await client.query("LISTEN debrief_sync_now");
+  await client.query("LISTEN debrief_summarized");
   client.on("notification", async (n) => {
     if (n.channel === "debrief_sync_now") return void sync("requested");
     if (n.channel === "debrief_transcribed" && n.payload) {
@@ -58,9 +61,26 @@ async function listen() {
       } catch (err) {
         log("Couldn't link transcript:", (err as Error).message);
       }
+      if (autoExtract()) {
+        try {
+          const r = await extractWithClaude(db, n.payload);
+          log(`Transcript ${n.payload}: summarized, ${r.tasks.length} action item(s)`);
+        } catch (err) {
+          log("Couldn't summarize:", (err as Error).message);
+        }
+      }
+    }
+    if (n.channel === "debrief_summarized" && n.payload) {
+      try {
+        const { id, again } = JSON.parse(n.payload) as { id: string; again?: boolean };
+        const r = await publishMeeting(db, id, { again });
+        log(`Meeting ${id}: ${[r.notes && `notes at ${r.notes}`, r.slack && "sent to Slack", ...r.errors].filter(Boolean).join("; ") || "nothing to do"}`);
+      } catch (err) {
+        log("Couldn't publish:", (err as Error).message);
+      }
     }
   });
-  log("Listening for new transcripts and sync requests");
+  log("Listening for new transcripts, summaries and sync requests");
 }
 
 await listen();

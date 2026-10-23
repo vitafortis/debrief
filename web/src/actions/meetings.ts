@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { extractWithClaude, linkTranscript, recordings, transcripts } from "@debrief/core";
+import { extractWithClaude, linkTranscript, recordings, requestPublish, slackConfigured, transcripts } from "@debrief/core";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -43,6 +43,17 @@ export async function saveSummary(transcriptId: string, summary: string) {
   return run(async () => {
     const s = z.string().trim().max(4000).parse(summary);
     await db().update(transcripts).set({ summary: s || null }).where(eq(transcripts.id, uuid.parse(transcriptId)));
+    // Rewrites the notes file, and tells Slack if it hasn't heard about this meeting yet.
+    if (s) await requestPublish(db(), transcriptId);
+  }, `/meetings/${transcriptId}`);
+}
+
+/** Posts the meeting's summary and action items to Slack again, and rewrites its notes file. */
+export async function sendToSlack(transcriptId: string) {
+  return run(async () => {
+    if (!slackConfigured()) throw new Error("Set SLACK_WEBHOOK_URL (or SLACK_WEBHOOKS per context) first.");
+    await requestPublish(db(), uuid.parse(transcriptId), true);
+    return "Sending to Slack.";
   }, `/meetings/${transcriptId}`);
 }
 

@@ -33,6 +33,7 @@ class Config:
     diarization_model: str
     scan_interval: float
     stable_seconds: float
+    abandon_hours: float
     model_dir: str | None
     extensions: set[str] = field(default_factory=lambda: set(AUDIO_EXTENSIONS))
 
@@ -60,5 +61,7 @@ class Config:
             diarization_model=os.environ.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-community-1"),
             scan_interval=float(os.environ.get("SCAN_INTERVAL", "30")),
             stable_seconds=float(os.environ.get("STABLE_SECONDS", "60")),
+            # A recording whose sidecar still says "recording" but hasn't grown in this long is taken as it is.
+            abandon_hours=float(os.environ.get("ABANDON_HOURS", "12")),
             model_dir=os.environ.get("MODEL_DIR") or None,
         )

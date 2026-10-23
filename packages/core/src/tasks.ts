@@ -51,7 +51,7 @@ export async function saveExtractedTasks(db: Db, transcriptId: string, items: Ta
               assignee: i.assignee ?? null,
               dueDate: i.dueDate ?? null,
               priority: i.priority ?? null,
-              destination: i.destination ?? meeting.event?.defaultDestination ?? "akiflow",
+              destination: i.destination ?? meeting.defaultDestination,
               context: meeting.context,
               sourceStart: i.sourceStart ?? null,
             }))
@@ -79,7 +79,7 @@ export async function addTask(db: Db, transcriptId: string, input: TaskInput) {
       assignee: i.assignee ?? null,
       dueDate: i.dueDate ?? null,
       priority: i.priority ?? null,
-      destination: i.destination ?? meeting.event?.defaultDestination ?? "akiflow",
+      destination: i.destination ?? meeting.defaultDestination,
       context: meeting.context,
       sourceStart: i.sourceStart ?? null,
     })

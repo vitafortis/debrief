@@ -1,14 +1,16 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
 import type { Db } from "./db";
 import {
   calendarEvents,
   calendars,
+  devices,
   eventAttendees,
   recordings,
   tasks,
   transcriptEvents,
   transcripts,
   type RecordingStatus,
+  type TaskDestination,
 } from "./schema";
 import { overlapScore, MATCH_THRESHOLD } from "./correlate";
 
@@ -35,6 +37,9 @@ const primaryEvent = (db: Db) =>
     .orderBy(transcriptEvents.transcriptId, desc(transcriptEvents.manual), desc(transcriptEvents.confidence))
     .as("pe");
 
+/** A meeting's context: its calendar's, else its device's when one is set in Settings. */
+export const meetingContext = sql<string | null>`coalesce(${calendars.context}, ${devices.context})`;
+
 export type MeetingFilter = {
   /** A calendar context ("ironclad"), or "unmatched" for meetings with no event. */
   context?: string | null;
@@ -50,7 +55,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
   if (f.from) where.push(gte(recordings.recordedAt, f.from));
   if (f.to) where.push(lt(recordings.recordedAt, f.to));
   if (f.context === "unmatched") where.push(sql`${pe.eventId} is null`);
-  else if (f.context) where.push(eq(calendars.context, f.context));
+  else if (f.context) where.push(sql`${meetingContext} = ${f.context}`);
 
   const rows = await db
     .select({
@@ -65,7 +70,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
       eventTitle: calendarEvents.title,
       eventStart: calendarEvents.startAt,
       confidence: pe.confidence,
-      context: calendars.context,
+      context: meetingContext,
       calendarName: calendars.name,
       openTasks: sql<number>`(select count(*)::int from ${tasks} where ${tasks.transcriptId} = ${transcripts.id} and ${tasks.status} in ('pending','approved'))`,
       attendeeCount: sql<number>`(select count(*)::int from ${eventAttendees} where ${eventAttendees.eventId} = ${calendarEvents.id})`,
@@ -75,6 +80,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
     .leftJoin(pe, eq(pe.transcriptId, transcripts.id))
     .leftJoin(calendarEvents, eq(calendarEvents.id, pe.eventId))
     .leftJoin(calendars, eq(calendars.id, calendarEvents.calendarId))
+    .leftJoin(devices, eq(devices.name, recordings.device))
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(recordings.recordedAt))
     .limit(f.limit ?? 50)
@@ -121,6 +127,7 @@ export async function getMeeting(db: Db, transcriptId: string) {
         .orderBy(asc(eventAttendees.name), asc(eventAttendees.email))
     : [];
 
+  const [device] = row.recording.device ? await db.select().from(devices).where(eq(devices.name, row.recording.device)) : [];
   const taskRows = await db.select().from(tasks).where(eq(tasks.transcriptId, transcriptId)).orderBy(asc(tasks.itemNumber));
   const event = events[0] ?? null;
   return {
@@ -129,7 +136,9 @@ export async function getMeeting(db: Db, transcriptId: string) {
     events,
     attendees: event ? attendees.filter((a) => a.eventId === event.id) : [],
     tasks: taskRows,
-    context: event?.context ?? null,
+    context: event?.context ?? device?.context ?? null,
+    /** Where this meeting's tasks go unless chosen per task. */
+    defaultDestination: event?.defaultDestination ?? device?.defaultDestination ?? "akiflow",
     displayTitle: meetingTitle({
       title: row.transcript.title,
       eventTitle: event?.title,
@@ -198,10 +207,37 @@ export async function listEventsWithStatus(db: Db, from: Date, to: Date, context
 }
 
 export async function listContexts(db: Db) {
-  const rows = await db
-    .selectDistinct({ context: calendars.context })
-    .from(calendars)
-    .where(eq(calendars.enabled, true))
-    .orderBy(asc(calendars.context));
-  return rows.map((r) => r.context);
+  const [cals, devs] = await Promise.all([
+    db.selectDistinct({ context: calendars.context }).from(calendars).where(eq(calendars.enabled, true)),
+    db.selectDistinct({ context: devices.context }).from(devices).where(isNotNull(devices.context)),
+  ]);
+  return [...new Set([...cals, ...devs].map((r) => r.context!))].sort();
+}
+
+/** Every device recordings came from, with its rule (none until set in Settings). */
+export async function listDevices(db: Db) {
+  const rows = await db.execute<{ name: string; context: string | null; default_destination: TaskDestination | null; recordings: number; last_recording: string | null; last_seen_at: string | null }>(sql`
+    with seen as (
+      select device as name, count(*)::int as recordings, max(recorded_at) as last_recording
+      from ${recordings} where device is not null group by device
+    )
+    select coalesce(d.name, s.name) as name, d.context, d.default_destination, coalesce(s.recordings, 0) as recordings,
+           s.last_recording, d.last_seen_at
+    from ${devices} d full outer join seen s on s.name = d.name
+    order by greatest(s.last_recording, d.last_seen_at) desc nulls last, 1`);
+  return rows.rows.map((r) => ({
+    name: r.name,
+    context: r.context,
+    defaultDestination: r.default_destination,
+    recordings: r.recordings,
+    lastActive: [r.last_recording, r.last_seen_at].filter(Boolean).map((d) => new Date(d!)).sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
+  }));
+}
+
+export async function setDeviceRule(db: Db, name: string, rule: { context?: string | null; defaultDestination?: TaskDestination | null }) {
+  const set = {
+    ...(rule.context !== undefined ? { context: rule.context?.trim() || null } : {}),
+    ...(rule.defaultDestination !== undefined ? { defaultDestination: rule.defaultDestination } : {}),
+  };
+  await db.insert(devices).values({ name, ...set }).onConflictDoUpdate({ target: devices.name, set });
 }

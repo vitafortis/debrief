@@ -1,0 +1,14 @@
+{
+  "name": "debrief-recorder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Records meetings on a Mac or Windows PC and streams them to Debrief.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

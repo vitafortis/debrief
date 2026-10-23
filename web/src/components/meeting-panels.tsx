@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, LoaderCircle, Pencil, Plus, RotateCcw, Sparkles } from "lucide-react";
-import { extractTasks, renameMeeting, renameSpeakers, retranscribe, saveSummary, setMeetingEvent } from "@/actions/meetings";
+import { Check, LoaderCircle, Pencil, Plus, RotateCcw, Send, Sparkles } from "lucide-react";
+import { extractTasks, renameMeeting, renameSpeakers, retranscribe, saveSummary, sendToSlack, setMeetingEvent } from "@/actions/meetings";
 import { addTaskToMeeting } from "@/actions/tasks";
 import { TaskItem, useAction, type TaskView } from "@/components/task-item";
 import { speakerLabel } from "@/lib/time";
@@ -178,7 +178,7 @@ export function MeetingTasks({
   const [copied, setCopied] = useState(false);
   const prompt = `Extract the action items from my Debrief meeting "${title}" and save them.`;
   return (
-    <section className="card overflow-hidden">
+    <section id="tasks" className="card scroll-mt-4 overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">Action items</h2>
         <div className="flex gap-1.5">
@@ -241,5 +241,20 @@ export function MeetingTasks({
         </div>
       )}
     </section>
+  );
+}
+
+/** Posts the summary and action items to Slack (again). */
+export function SlackButton({ transcriptId, sentAt }: { transcriptId: string; sentAt: string | null }) {
+  const [pending, go] = useAction();
+  return (
+    <button
+      className="btn btn-ghost btn-sm"
+      disabled={pending}
+      title={sentAt ? `Sent to Slack ${new Date(sentAt).toLocaleString()}` : "Post the summary and action items to Slack"}
+      onClick={() => go(() => sendToSlack(transcriptId))}
+    >
+      {pending ? <LoaderCircle className="animate-spin" /> : <Send />} {sentAt ? "Send again" : "Slack"}
+    </button>
   );
 }

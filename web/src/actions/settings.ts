@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { TASK_DESTINATIONS, calendars } from "@debrief/core";
+import { TASK_DESTINATIONS, calendars, createApiKey, deleteApiKey, setDeviceRule } from "@debrief/core";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -73,6 +73,45 @@ export async function removeCalendar(id: string): Promise<Result> {
     await db().delete(calendars).where(eq(calendars.id, z.uuid().parse(id)));
     refresh();
     return { ok: true, message: "Removed, with its events." };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function createKey(name: string): Promise<Result & { key?: string }> {
+  try {
+    await requireViewer();
+    const k = await createApiKey(db(), z.string().trim().min(1, "Name the key (where it's used).").max(80).parse(name));
+    refresh();
+    return { ok: true, key: k.key };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deleteKey(id: string): Promise<Result> {
+  try {
+    await requireViewer();
+    await deleteApiKey(db(), z.uuid().parse(id));
+    refresh();
+    return { ok: true, message: "Key revoked. Anything using it is signed out." };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function updateDevice(name: string, rule: { context?: string | null; defaultDestination?: (typeof TASK_DESTINATIONS)[number] | null }): Promise<Result> {
+  try {
+    await requireViewer();
+    const v = z
+      .object({ context: context.nullish().or(z.literal("").transform(() => null)), defaultDestination: z.enum(TASK_DESTINATIONS).nullish() })
+      .parse(rule);
+    await setDeviceRule(db(), z.string().min(1).max(80).parse(name), {
+      ...(rule.context !== undefined ? { context: v.context ?? null } : {}),
+      ...(rule.defaultDestination !== undefined ? { defaultDestination: v.defaultDestination ?? null } : {}),
+    });
+    refresh();
+    return { ok: true };
   } catch (err) {
     return fail(err);
   }
