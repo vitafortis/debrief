@@ -7,8 +7,8 @@ export function Logo({ size = 28 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="shrink-0">
       <defs>
         <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="oklch(78% 0.14 163)" />
-          <stop offset="1" stopColor="oklch(48% 0.12 168)" />
+          <stop offset="0" stopColor="oklch(78% 0.13 200)" />
+          <stop offset="1" stopColor="oklch(48% 0.11 208)" />
         </linearGradient>
         <linearGradient id={`${id}-sheen`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0.22" />

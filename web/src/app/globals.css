@@ -4,46 +4,47 @@
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-/* Palette follows Arcane: a violet primary (hue 163) over faintly violet-tinted neutrals. */
+/* The ·modern palette (pg·modern, octo·modern) in teal: primary hue 200, clear of the green of
+   --success, the red of --danger and the blue/orange calendar colours, over faintly teal neutrals. */
 :root {
-	--background: oklch(99% 0.005 163);
+	--background: oklch(99% 0.005 200);
 	--foreground: oklch(14.5% 0 0);
 	--card: oklch(100% 0 0);
 	--card-foreground: oklch(14.5% 0 0);
-	--surface: oklch(97.5% 0.006 163);
-	--muted: oklch(96% 0.005 163);
-	--muted-foreground: oklch(52% 0.01 163);
-	--accent: oklch(94% 0.02 163);
+	--surface: oklch(97.5% 0.006 200);
+	--muted: oklch(96% 0.005 200);
+	--muted-foreground: oklch(52% 0.010 200);
+	--accent: oklch(94% 0.020 200);
 	--accent-foreground: oklch(20.5% 0 0);
-	--border: oklch(90% 0.01 163);
-	--input: oklch(88% 0.012 163);
-	--primary: oklch(56% 0.13 163);
+	--border: oklch(90% 0.010 200);
+	--input: oklch(88% 0.012 200);
+	--primary: oklch(56% 0.137 200);
 	--primary-foreground: oklch(98.5% 0 0);
-	--primary-soft: oklch(56% 0.13 163 / 0.1);
+	--primary-soft: oklch(56% 0.137 200 / 0.1);
 	--success: oklch(58% 0.16 142);
 	--warning: oklch(70% 0.16 70);
 	--danger: oklch(58% 0.22 25);
-	/* Filled primary buttons: a muted emerald with depth, calmer than --primary (used for accents). */
-	--primary-solid-top: oklch(55% 0.115 163);
-	--primary-solid-bottom: oklch(49% 0.115 163);
-	--primary-solid-edge: oklch(43% 0.1 163);
+	/* Filled primary buttons: a muted teal with depth, calmer than --primary (used for accents). */
+	--primary-solid-top: oklch(55% 0.121 200);
+	--primary-solid-bottom: oklch(49% 0.121 200);
+	--primary-solid-edge: oklch(43% 0.105 200);
 	/* Filled danger buttons: the same depth as primary, in red. */
 	--danger-solid-top: oklch(57% 0.19 25);
 	--danger-solid-bottom: oklch(51% 0.19 25);
 	--danger-solid-edge: oklch(44% 0.16 25);
 	/* Outlined (secondary) buttons: a faint raised surface with a visible edge. */
 	--secondary-top: oklch(100% 0 0);
-	--secondary-bottom: oklch(97% 0.005 163);
-	--secondary-edge: oklch(85% 0.014 163);
+	--secondary-bottom: oklch(97% 0.005 200);
+	--secondary-edge: oklch(85% 0.014 200);
 	--secondary-highlight: oklch(100% 0 0 / 0.8);
 	--ring: var(--primary);
-	--glow: oklch(70% 0.15 163 / 0.14);
+	--glow: oklch(70% 0.158 200 / 0.14);
 	--shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.06), 0 1px 2px -1px oklch(0% 0 0 / 0.06);
-	--shadow-lg: 0 12px 32px -8px oklch(30% 0.05 163 / 0.18), 0 2px 6px oklch(0% 0 0 / 0.05);
-	--syntax-keyword: oklch(52% 0.13 163);
+	--shadow-lg: 0 12px 32px -8px oklch(30% 0.050 200 / 0.18), 0 2px 6px oklch(0% 0 0 / 0.05);
+	--syntax-keyword: oklch(52% 0.137 200);
 	--syntax-string: oklch(52% 0.13 155);
 	--syntax-number: oklch(58% 0.16 50);
-	--syntax-comment: oklch(62% 0.01 163);
+	--syntax-comment: oklch(62% 0.010 200);
 	--syntax-type: oklch(55% 0.13 230);
 	--syntax-function: oklch(55% 0.15 320);
 	/* Calendar contexts (validated for CVD separation on both surfaces). */
@@ -55,40 +56,40 @@
 }
 
 :root[data-theme='dark'] {
-	--background: oklch(12% 0.01 163);
+	--background: oklch(12% 0.010 200);
 	--foreground: oklch(98.5% 0 0);
-	--card: oklch(14.5% 0.012 163);
+	--card: oklch(14.5% 0.012 200);
 	--card-foreground: oklch(98.5% 0 0);
-	--surface: oklch(13.2% 0.011 163);
-	--muted: oklch(18% 0.01 163);
-	--muted-foreground: oklch(64% 0.012 163);
-	--accent: oklch(20% 0.02 163);
+	--surface: oklch(13.2% 0.011 200);
+	--muted: oklch(18% 0.010 200);
+	--muted-foreground: oklch(64% 0.012 200);
+	--accent: oklch(20% 0.020 200);
 	--accent-foreground: oklch(98.5% 0 0);
-	--border: oklch(22% 0.012 163);
-	--input: oklch(25% 0.014 163);
-	--primary: oklch(74% 0.15 163);
+	--border: oklch(22% 0.012 200);
+	--input: oklch(25% 0.014 200);
+	--primary: oklch(74% 0.158 200);
 	--primary-foreground: oklch(98.5% 0 0);
-	--primary-soft: oklch(74% 0.15 163 / 0.13);
-	--primary-solid-top: oklch(53% 0.105 163);
-	--primary-solid-bottom: oklch(46% 0.105 163);
-	--primary-solid-edge: oklch(39% 0.09 163);
+	--primary-soft: oklch(74% 0.158 200 / 0.13);
+	--primary-solid-top: oklch(53% 0.110 200);
+	--primary-solid-bottom: oklch(46% 0.110 200);
+	--primary-solid-edge: oklch(39% 0.095 200);
 	--danger-solid-top: oklch(55% 0.17 25);
 	--danger-solid-bottom: oklch(48% 0.17 25);
 	--danger-solid-edge: oklch(41% 0.14 25);
-	--secondary-top: oklch(23% 0.014 163);
-	--secondary-bottom: oklch(19.5% 0.012 163);
-	--secondary-edge: oklch(31% 0.016 163);
+	--secondary-top: oklch(23% 0.014 200);
+	--secondary-bottom: oklch(19.5% 0.012 200);
+	--secondary-edge: oklch(31% 0.016 200);
 	--secondary-highlight: oklch(100% 0 0 / 0.06);
 	--success: oklch(74% 0.18 142);
 	--warning: oklch(80% 0.15 75);
 	--danger: oklch(68% 0.2 25);
-	--glow: oklch(62% 0.14 163 / 0.2);
+	--glow: oklch(62% 0.147 200 / 0.2);
 	--shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.3), 0 1px 2px -1px oklch(0% 0 0 / 0.3);
 	--shadow-lg: 0 16px 40px -12px oklch(0% 0 0 / 0.6), 0 0 0 1px oklch(100% 0 0 / 0.02);
-	--syntax-keyword: oklch(78% 0.13 163);
+	--syntax-keyword: oklch(78% 0.137 200);
 	--syntax-string: oklch(80% 0.13 155);
 	--syntax-number: oklch(82% 0.12 60);
-	--syntax-comment: oklch(52% 0.015 163);
+	--syntax-comment: oklch(52% 0.015 200);
 	--syntax-type: oklch(78% 0.1 220);
 	--syntax-function: oklch(78% 0.13 330);
 	--series-1: #e8590c;

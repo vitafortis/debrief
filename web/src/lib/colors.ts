@@ -1,4 +1,4 @@
-// Green last: it sits too close to the emerald accent.
+// Green last: it reads as the "ready" status colour.
 const SERIES = ["var(--series-2)", "var(--series-1)", "var(--series-4)", "var(--series-3)"];
 
 /** A steady colour per calendar context, by its place in the sorted list. */

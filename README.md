@@ -167,7 +167,7 @@ cd transcriber && uv venv && uv pip install -e . pytest && .venv/bin/pytest
 | Path | |
 |---|---|
 | `packages/core` | Schema and migrations (Drizzle), calendar sync, matching, search, tasks and integrations, shared by every Node service |
-| `web` | The UI: Next.js 16 with the ·modern theme in emerald (Geist, sidebar shell, raised buttons) |
+| `web` | The UI: Next.js 16 with the ·modern theme in teal (Geist, sidebar shell, raised buttons) |
 | `services/calendar-sync` | The calendar poller; also listens for new transcripts (`pg_notify`) |
 | `services/mcp` | The MCP server (streamable HTTP, stateless) |
 | `transcriber` | Python: folder scanner, faster-whisper, pyannote |
