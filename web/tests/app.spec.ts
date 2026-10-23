@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// These tests change the seeded data, so a retry would start from a different state.
+test.describe.configure({ retries: 0 });
+
 async function signIn(page: Page) {
   await page.goto("/login");
   await page.fill("#pw", "e2e-password");
@@ -87,7 +90,10 @@ test.describe("signed in", () => {
     await runbook.getByTitle("Dismiss").click();
     await expect(runbook).toHaveCount(0);
     await page.goto("/tasks?status=dismissed");
-    await page.locator("div.\\@container", { hasText: "Update the runbook" }).getByRole("button", { name: "Restore" }).click();
+    const dismissed = page.locator("div.\\@container", { hasText: "Update the runbook" });
+    await dismissed.getByRole("button", { name: "Restore" }).click();
+    // Wait for the save to land (the row leaves the Dismissed list) before moving on.
+    await expect(dismissed).toHaveCount(0);
     await page.goto("/tasks");
     await expect(page.getByText("Update the runbook")).toBeVisible();
   });
