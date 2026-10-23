@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrief docs</title>
+<meta name="description" content="Requirements, setup, usage and configuration for Debrief, the self-hosted meeting transcriber.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body>
+
+<header class="header">
+	<div class="wrap">
+		<a class="brand" href="./"><img src="logo.svg" alt="">Debrief</a>
+		<nav class="nav">
+			<a class="hide-sm" href="./#screenshots">Screenshots</a>
+			<a href="docs.html">Docs</a>
+			<a href="https://github.com/vitafortis/debrief">GitHub</a>
+			<button class="icon-btn" type="button" data-theme-toggle aria-label="Switch between light and dark">
+				<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+				<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+			</button>
+		</nav>
+	</div>
+</header>
+
+<div class="wrap docs">
+	<aside class="toc">
+		<details open>
+			<summary>On this page</summary>
+			<!-- toc -->
+		</details>
+	</aside>
+	<article class="prose">
+		<!-- content -->
+	</article>
+</div>
+
+<footer class="footer">
+	<div class="wrap">
+		<span>Built from the <a href="https://github.com/vitafortis/debrief/blob/main/README.md">README</a>.</span>
+		<span class="spacer"></span>
+		<a href="./">Home</a>
+		<a href="https://github.com/vitafortis/debrief">GitHub</a>
+		<a href="https://github.com/vitafortis/debrief/issues">Issues</a>
+	</div>
+</footer>
+
+<script>
+	// Highlight the section being read in the table of contents.
+	const links = new Map([...document.querySelectorAll('.toc a')].map((a) => [a.hash.slice(1), a]));
+	const seen = new IntersectionObserver((entries) => {
+		for (const e of entries) {
+			if (!e.isIntersecting) continue;
+			links.forEach((a) => a.classList.remove('active'));
+			links.get(e.target.id)?.classList.add('active');
+		}
+	}, { rootMargin: '-15% 0px -75% 0px' });
+	document.querySelectorAll('.prose h2[id], .prose h3[id]').forEach((h) => links.has(h.id) && seen.observe(h));
+	if (innerWidth < 1024) document.querySelector('.toc details').open = false;
+</script>
+</body>
+</html>

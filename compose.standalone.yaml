@@ -1,0 +1,31 @@
+# Debrief without Traefik: web on port 3000 and the MCP server on 3001,
+# straight from the host. Use it on top of compose.yaml:
+#
+#   docker compose -f compose.yaml -f compose.standalone.yaml up -d
+#
+# or put COMPOSE_FILE=compose.yaml:compose.standalone.yaml in .env so plain
+# `docker compose` picks both up. Set DEBRIEF_URL in .env to the address you
+# browse to (e.g. http://192.168.1.20:3000); sign-in and links use it.
+# Put your own HTTPS proxy in front before exposing it beyond your LAN.
+services:
+  calendar-sync:
+    environment:
+      PUBLIC_URL: ${DEBRIEF_URL:-http://localhost:3000}
+
+  web:
+    environment:
+      PUBLIC_URL: ${DEBRIEF_URL:-http://localhost:3000}
+      AUTH_URL: ${DEBRIEF_URL:-http://localhost:3000}
+    ports: ["${WEB_PORT:-3000}:3000"]
+    networks: !reset [default]
+    labels: !reset []
+
+  mcp-server:
+    environment:
+      PUBLIC_URL: ${DEBRIEF_URL:-http://localhost:3000}
+    ports: ["${MCP_PORT:-3001}:3001"]
+    networks: !reset [default]
+    labels: !reset []
+
+networks:
+  traefik: !reset {}

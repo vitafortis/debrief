@@ -112,8 +112,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Without Traefik: uncomment, and drop the traefik network and labels.
-    # ports: ["3000:3000"]
+    # Without Traefik: compose.standalone.yaml publishes port 3000 instead.
     networks: [default, traefik]
     labels:
       - traefik.enable=true
@@ -133,8 +132,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Without Traefik: uncomment (Claude then connects to http://<host>:3001/mcp).
-    # ports: ["3001:3001"]
+    # Without Traefik: compose.standalone.yaml publishes port 3001 (Claude connects to http://<host>:3001/mcp).
     networks: [default, traefik]
     # Same host, /mcp: Claude authenticates with an API key (or MCP_TOKEN), so no SSO in front of it.
     labels:

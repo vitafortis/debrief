@@ -3,7 +3,8 @@
 <h1 align="center">Debrief</h1>
 
 <p align="center">Self-hosted meeting transcripts with calendar context and follow-ups.<br>
-No bots join your calls, and nothing leaves your network unless you send it.</p>
+No bots join your calls, and nothing leaves your network unless you send it.<br>
+<a href="https://vitafortis.github.io/debrief/">Website and docs</a></p>
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -145,7 +146,20 @@ Then edit `.env`:
 
 The rest (sign-in, calendars, task destinations, Slack) is covered in the next steps. API keys for the recorder and Claude are made in the app, after it's running.
 
-**Traefik.** `compose.yaml` expects an external Docker network called `traefik` and an entrypoint called `websecure`. Rename them in the labels if yours differ. Without Traefik, uncomment the `ports:` lines on `web` (3000) and `mcp-server` (3001) and delete the Traefik networks and labels.
+**Traefik.** `compose.yaml` expects an external Docker network called `traefik` and an entrypoint called `websecure`. Rename them in the labels if yours differ.
+
+**Without Traefik.** `compose.standalone.yaml` drops the Traefik network and labels and publishes `web` on port 3000 and `mcp-server` on 3001. Download it next to `compose.yaml` and add two lines to `.env`:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/vitafortis/debrief/main/compose.standalone.yaml
+```
+
+```sh
+COMPOSE_FILE=compose.yaml:compose.standalone.yaml
+DEBRIEF_URL=http://192.168.1.20:3000     # the address you browse to
+```
+
+Plain `docker compose` then uses both files. Put an HTTPS proxy in front before opening it beyond your LAN.
 
 ### 5. Set up sign-in
 

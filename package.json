@@ -13,9 +13,12 @@
     "check": "pnpm -r check",
     "db:generate": "pnpm --filter @debrief/core db:generate",
     "db:migrate": "pnpm --filter @debrief/core db:migrate",
-    "test": "pnpm --filter @debrief/core test"
+    "test": "pnpm --filter @debrief/core test",
+    "site": "node scripts/build-site.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1"
+    "@playwright/test": "1.64.1",
+    "marked": "18.1.1",
+    "marked-gfm-heading-id": "4.1.4"
   }
 }
