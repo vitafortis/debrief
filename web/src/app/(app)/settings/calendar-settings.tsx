@@ -21,15 +21,24 @@ type Cal = {
 function CalendarRow({ c }: { c: Cal }) {
   const [pending, go] = useAction();
   const [ctx, setCtx] = useState(c.context);
+  // Shown at once; the server catches up (and a failure puts it back).
+  const [enabled, setEnabled] = useState(c.enabled);
   return (
-    <div className={`grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_9rem_8rem_auto] ${c.enabled ? "" : "opacity-60"}`}>
+    <div className={`grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_9rem_8rem_auto] ${enabled ? "" : "opacity-60"}`}>
       <div className="flex min-w-0 items-start gap-3">
         <input
           type="checkbox"
           className="checkbox mt-0.5"
-          checked={c.enabled}
-          disabled={pending}
-          onChange={(e) => go(() => updateCalendar(c.id, { enabled: e.target.checked }))}
+          checked={enabled}
+          onChange={(e) => {
+            const v = e.target.checked;
+            setEnabled(v);
+            go(async () => {
+              const r = await updateCalendar(c.id, { enabled: v });
+              if (!r.ok) setEnabled(!v);
+              return r;
+            });
+          }}
           aria-label={`Sync ${c.name}`}
         />
         <div className="min-w-0">
@@ -39,7 +48,7 @@ function CalendarRow({ c }: { c: Cal }) {
             {c.source === "ics" ? c.externalId.replace(/^https?:\/\/([^/]+).*/, "$1/…") : c.externalId}
           </p>
           <p className={`text-[0.6875rem] ${c.lastError ? "text-danger" : "text-muted-foreground"}`}>
-            {c.lastError ?? (c.lastSynced ? `Synced ${c.lastSynced}` : c.enabled ? "Not synced yet" : "Off")}
+            {c.lastError ?? (!enabled ? "Off" : c.lastSynced ? `Synced ${c.lastSynced}` : "Not synced yet")}
           </p>
         </div>
       </div>

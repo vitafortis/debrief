@@ -1,0 +1,122 @@
+# Debrief on the HP: Postgres on local disk, the recordings on the NAS's NFS
+# export at /mnt/meetings, everything else stateless. Copy .env.example to
+# .env and fill it in. Traefik labels assume an external "traefik" network;
+# sign-in is Authentik over OpenID Connect, inside the app.
+name: debrief
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: debrief
+      POSTGRES_USER: debrief
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    # Local SSD, never NFS: Postgres' WAL doesn't survive network filesystems.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U debrief"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  transcriber:
+    image: ghcr.io/vitafortis/debrief-transcriber:${DEBRIEF_TAG:-latest}
+    restart: unless-stopped
+    # The NAS export's owner, so exports can be written (uid:gid).
+    user: ${MEETINGS_UID:-1000}:${MEETINGS_GID:-1000}
+    volumes:
+      - /mnt/meetings:/mnt/meetings
+      - models:/models
+    environment:
+      POSTGRES_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      DEVICE: ${WHISPER_DEVICE:-cpu} # cuda once the T4 is in; see README, "A GPU later"
+      HF_TOKEN: ${HF_TOKEN:-}
+      TZ: ${TZ:-America/New_York}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  calendar-sync:
+    image: ghcr.io/vitafortis/debrief-calendar-sync:${DEBRIEF_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      POSTGRES_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
+      GOOGLE_CREDENTIALS_FILE: /run/secrets/google-creds.json
+      GOOGLE_CALENDARS: ${GOOGLE_CALENDARS:-}
+      ICS_CALENDARS: ${ICS_CALENDARS:-}
+      POLL_INTERVAL_SECONDS: 300
+      TZ: ${TZ:-America/New_York}
+    secrets:
+      - google-creds.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/vitafortis/debrief-web:${DEBRIEF_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - /mnt/meetings/audio:/mnt/meetings/audio:ro
+    environment: &app-env
+      DATABASE_URL: postgresql://debrief:${DB_PASSWORD}@postgres:5432/debrief
+      PUBLIC_URL: https://${DEBRIEF_HOST:-debrief.armgrp.dev}
+      TZ: ${TZ:-America/New_York}
+      AKIFLOW_WEBHOOK_URL: ${AKIFLOW_WEBHOOK_URL:-}
+      LINEAR_API_KEY: ${LINEAR_API_KEY:-}
+      LINEAR_TEAM: ${LINEAR_TEAM:-}
+      LINEAR_TEAMS: ${LINEAR_TEAMS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      AUTH_URL: https://${DEBRIEF_HOST:-debrief.armgrp.dev}
+      AUTH_OIDC_ISSUER: ${AUTH_OIDC_ISSUER:-}
+      AUTH_OIDC_ID: ${AUTH_OIDC_ID:-}
+      AUTH_OIDC_SECRET: ${AUTH_OIDC_SECRET:-}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      DEBRIEF_PASSWORD: ${DEBRIEF_PASSWORD:-}
+      OWNER_NAME: ${OWNER_NAME:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [default, traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.debrief.rule=Host(`${DEBRIEF_HOST:-debrief.armgrp.dev}`)
+      - traefik.http.routers.debrief.entrypoints=websecure
+      - traefik.http.routers.debrief.tls=true
+      - traefik.http.services.debrief.loadbalancer.server.port=3000
+
+  mcp-server:
+    image: ghcr.io/vitafortis/debrief-mcp:${DEBRIEF_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      MCP_TOKEN: ${MCP_TOKEN:?set MCP_TOKEN in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [default, traefik]
+    # Same host, /mcp: Claude authenticates with MCP_TOKEN, so no SSO in front of it.
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.debrief-mcp.rule=Host(`${DEBRIEF_HOST:-debrief.armgrp.dev}`) && PathPrefix(`/mcp`)
+      - traefik.http.routers.debrief-mcp.entrypoints=websecure
+      - traefik.http.routers.debrief-mcp.tls=true
+      - traefik.http.services.debrief-mcp.loadbalancer.server.port=3001
+
+volumes:
+  pgdata:
+  models:
+
+networks:
+  traefik:
+    external: true
+
+secrets:
+  # Leave the file empty if you only use ICS feeds.
+  google-creds.json:
+    file: ./secrets/google-creds.json

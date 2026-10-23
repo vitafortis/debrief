@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import {
   CalendarDays,
   LayoutDashboard,
@@ -30,11 +30,22 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+const THEME_EVENT = "debrief-theme";
+
+function readTheme(): "dark" | "light" {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+/** The theme the inline script in the root layout picked, and a setter that saves it. */
 function useTheme() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  useEffect(() => {
-    setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
-  }, []);
+  const theme = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener(THEME_EVENT, cb);
+      return () => window.removeEventListener(THEME_EVENT, cb);
+    },
+    readTheme,
+    () => "dark" as const
+  );
   return [
     theme,
     (t: "dark" | "light") => {
@@ -42,7 +53,7 @@ function useTheme() {
       try {
         localStorage.setItem("debrief-theme", t);
       } catch {}
-      setTheme(t);
+      window.dispatchEvent(new Event(THEME_EVENT));
     },
   ] as const;
 }

@@ -68,7 +68,10 @@ export function googleAuth(): Promise<AuthClient | null> {
   googleClient ??= (async () => {
     const file = process.env.GOOGLE_CREDENTIALS_FILE;
     if (!file) return null;
-    const json = JSON.parse(await fs.readFile(file, "utf8"));
+    // compose mounts the secret either way; an empty or missing file means "no Google".
+    const raw = await fs.readFile(file, "utf8").catch(() => "");
+    if (!raw.trim()) return null;
+    const json = JSON.parse(raw);
     if (json.type === "authorized_user") {
       const client = new OAuth2Client(json.client_id, json.client_secret);
       client.setCredentials({ refresh_token: json.refresh_token });

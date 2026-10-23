@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: debrief
+          POSTGRES_PASSWORD: debrief
+          POSTGRES_DB: debrief_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U debrief" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://debrief:debrief@localhost:5432/debrief_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -r check
+      - name: Lint
+        run: pnpm --filter web lint
+      - name: Core tests
+        run: pnpm --filter @debrief/core test
+      - name: Build
+        run: pnpm --filter web build && pnpm --filter calendar-sync build && pnpm --filter mcp build
+      - name: End-to-end
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm --filter web test:e2e
+        env:
+          E2E_DATABASE_URL: postgresql://debrief:debrief@localhost:5432/debrief_e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7
+
+  transcriber:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: transcriber
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.12 && uv pip install -e . pytest
+      - run: uv run --no-sync pytest -q

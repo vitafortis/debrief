@@ -52,7 +52,8 @@ export function MeetingPlayer({
   const [time, setTime] = useState(initialTime ?? 0);
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
-  const [follow, setFollow] = useState(true);
+  // Arriving from search with a phrase: stay on the first match rather than following playback.
+  const [follow, setFollow] = useState(!(initialQuery && initialTime == null));
   const [query, setQuery] = useState(initialQuery ?? "");
   const [hit, setHit] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -188,11 +189,11 @@ export function MeetingPlayer({
     setFollow(false);
     listRef.current?.querySelector<HTMLElement>(`[data-seg="${hits[i]}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
+  const firstHit = useRef(hits[0]);
   useEffect(() => {
-    if (initialQuery && hits.length && !initialTime) goHit(0);
-    // Only on first render with a query from search.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (initialQuery && initialTime == null && firstHit.current != null)
+      listRef.current?.querySelector<HTMLElement>(`[data-seg="${firstHit.current}"]`)?.scrollIntoView({ block: "center" });
+  }, [initialQuery, initialTime]);
 
   return (
     <div className="card flex min-h-0 flex-col overflow-hidden">

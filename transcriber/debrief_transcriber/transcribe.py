@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -11,6 +12,9 @@ from .config import Config
 from .speakers import Turn, Word, merge_adjacent, split_by_speaker
 
 log = logging.getLogger("debrief.transcribe")
+
+# pyannote warns that its own decoder (torchcodec) can't load; it's never used, the audio is passed in decoded.
+warnings.filterwarnings("ignore", message=r"(?s).*torchcodec is not installed correctly")
 
 SAMPLE_RATE = 16000
 

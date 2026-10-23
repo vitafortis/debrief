@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start -p 3150",
     "check": "tsc --noEmit",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@debrief/core": "workspace:^",
@@ -29,6 +30,7 @@
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24",
+    "@types/pg": "^8.23.1",
     "@types/react": "19",
     "@types/react-dom": "19",
     "eslint": "9",

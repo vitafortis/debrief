@@ -29,7 +29,7 @@ export function transcriptText(m: Pick<Meeting, "transcript">) {
 export function meetingBrief(m: Meeting) {
   const lines = [
     `Meeting: ${m.displayTitle}`,
-    `Date: ${m.recording.recordedAt.toISOString()}${m.recording.durationSecs ? ` (${Math.round(m.recording.durationSecs / 60)} min)` : ""}`,
+    `Date: ${m.recording.recordedAt.toLocaleString("en-US", { timeZone: process.env.TZ || undefined, dateStyle: "full", timeStyle: "short" })}${m.recording.durationSecs ? ` (${Math.round(m.recording.durationSecs / 60)} min)` : ""}`,
     m.context ? `Calendar context: ${m.context}` : null,
     m.event?.organizerEmail ? `Organizer: ${m.event.organizerEmail}` : null,
     m.attendees.length ? `Attendees: ${m.attendees.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", ")}` : null,
