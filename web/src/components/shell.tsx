@@ -188,11 +188,45 @@ export function Shell({
         </div>
       </aside>
 
-      <main className="relative min-w-0 flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
+      <main className="relative min-w-0 flex-1 overflow-y-auto pb-16 md:pb-0">
+        {/* Phones: a top bar with the calendar filter, theme and sign-out, and a bottom bar instead of the sidebar. */}
+        <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-surface/95 px-4 backdrop-blur md:hidden">
+          <Link href="/" className="flex items-center gap-2">
+            <Logo size={22} />
+            <span className="text-[0.9375rem] font-semibold tracking-tight">Debrief</span>
+          </Link>
+          <span className="flex-1" />
+          {contexts.length > 1 && (
+            <select
+              className="input h-8 w-auto max-w-40 py-0 text-xs"
+              aria-label="Calendar"
+              value={context ?? ""}
+              onChange={(e) => pick(e.target.value || null)}
+            >
+              <option value="">All calendars</option>
+              {contexts.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          <button className="btn btn-ghost btn-icon btn-sm" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </button>
+          {canSignOut && (
+            <form action={signOutAction}>
+              <button className="btn btn-ghost btn-icon btn-sm" title="Sign out">
+                <LogOut />
+              </button>
+            </form>
+          )}
+        </div>
+        {children}
+      </main>
 
-      {/* Phones: a bottom bar instead of the sidebar. */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 backdrop-blur md:hidden">
-        {NAV.filter((n) => n.href !== "/settings").map((n) => {
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        {NAV.map((n) => {
           const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
           return (
             <Link

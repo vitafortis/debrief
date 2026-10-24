@@ -187,7 +187,17 @@ export default async function Dashboard() {
             <EmptyState
               icon={AudioLines}
               title="No transcripts yet"
-              body="Record a call with Meetily and let it sync to the NAS. New recordings show up here a few minutes after they land."
+              body="Install the Debrief Recorder on your Mac or PC and give it an API key. It records your calls and sends them here, and each one shows up a minute or two after you hang up."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Link href="/settings/devices" className="btn btn-primary">
+                    Create an API key
+                  </Link>
+                  <a href="https://vitafortis.github.io/debrief/docs.html#10-set-up-recording-on-each-desktop" className="btn btn-secondary" target="_blank" rel="noreferrer">
+                    Get the recorder
+                  </a>
+                </div>
+              }
             />
           )}
         </section>

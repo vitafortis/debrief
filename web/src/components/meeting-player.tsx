@@ -100,7 +100,7 @@ export function MeetingPlayer({
     const onTime = () => setTime(audio.currentTime);
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onError = () => setAudioError("The audio couldn't be loaded. Is the NAS mounted on the web container?");
+    const onError = () => setAudioError("The audio couldn't be loaded. It may have been archived somewhere the server can't reach; check Settings → Recordings.");
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 const TABS = [
   { href: "/settings", label: "General" },
@@ -16,8 +17,13 @@ const TABS = [
 
 export function SettingsTabs() {
   const pathname = usePathname();
+  const nav = useRef<HTMLElement>(null);
+  // On a phone the tabs scroll sideways: keep the open one in view.
+  useEffect(() => {
+    nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [pathname]);
   return (
-    <nav className="-mb-px flex gap-1 overflow-x-auto border-b border-border px-4 md:px-8" aria-label="Settings sections">
+    <nav ref={nav} className="-mb-px flex gap-1 overflow-x-auto border-b border-border px-4 md:px-8" aria-label="Settings sections">
       {TABS.map((t) => {
         const active = pathname === t.href;
         return (
