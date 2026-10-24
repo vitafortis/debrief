@@ -17,7 +17,7 @@ export default defineConfig({
   globalSetup: "./tests/global-setup.ts",
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure", ...devices["Desktop Chrome"] },
   webServer: {
-    command: `npx next start -p ${PORT}`,
+    command: `node tests/ensure-db.mjs && npx next start -p ${PORT}`,
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
