@@ -21,6 +21,8 @@
 	--primary: oklch(56% 0.137 200);
 	--primary-foreground: oklch(98.5% 0 0);
 	--primary-soft: oklch(56% 0.137 200 / 0.1);
+	--primary-ink: color-mix(in oklch, var(--primary) 80%, black);
+	--danger-ink: color-mix(in oklch, var(--danger) 86%, black);
 	--success: oklch(58% 0.16 142);
 	--warning: oklch(70% 0.16 70);
 	--danger: oklch(58% 0.22 25);
@@ -70,6 +72,8 @@
 	--primary: oklch(74% 0.158 200);
 	--primary-foreground: oklch(98.5% 0 0);
 	--primary-soft: oklch(74% 0.158 200 / 0.13);
+	--primary-ink: color-mix(in oklch, var(--primary) 50%, white);
+	--danger-ink: color-mix(in oklch, var(--danger) 62%, white);
 	--primary-solid-top: oklch(53% 0.110 200);
 	--primary-solid-bottom: oklch(46% 0.110 200);
 	--primary-solid-edge: oklch(39% 0.095 200);
@@ -157,63 +161,49 @@
 
 @layer components {
 	/* Buttons follow Arcane's: rounded-xl, soft tinted shadows, press-to-shrink, 3px focus ring. */
+	/* Tinted buttons: a translucent fill of the button's colour with a fine edge of the same,
+	   so they sit on the page instead of standing out of it. No gradients and no press shrink. */
 	.btn {
-		@apply relative inline-flex h-9 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-xl px-4 text-[0.8125rem] font-medium whitespace-nowrap outline-none transition-all duration-200 select-none active:scale-[0.97] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 has-[>svg]:px-3.5 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0;
+		@apply relative inline-flex h-9 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-[7px] px-4 text-[0.8125rem] font-medium whitespace-nowrap outline-none backdrop-blur-sm transition-colors duration-150 select-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 has-[>svg]:px-3.5 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0;
 	}
 	.btn-primary {
-		background: linear-gradient(var(--primary-solid-top), var(--primary-solid-bottom));
-		color: var(--primary-foreground);
-		box-shadow:
-			inset 0 1px 0 oklch(100% 0 0 / 0.14),
-			0 0 0 1px var(--primary-solid-edge),
-			0 1px 2px oklch(0% 0 0 / 0.2);
+		color: var(--primary-ink);
+		background: color-mix(in oklch, var(--primary) 16%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 40%, transparent);
 	}
 	.btn-primary:hover {
-		filter: brightness(1.08);
+		background: color-mix(in oklch, var(--primary) 26%, transparent);
 	}
 	.btn-secondary {
-		@apply text-foreground hover:text-primary;
-		background: linear-gradient(var(--secondary-top), var(--secondary-bottom));
-		box-shadow:
-			inset 0 1px 0 var(--secondary-highlight),
-			0 0 0 1px var(--secondary-edge),
-			0 1px 2px oklch(0% 0 0 / 0.12);
+		@apply text-foreground;
+		background: color-mix(in oklch, var(--foreground) 4%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground) 13%, transparent);
 	}
 	.btn-secondary:hover {
-		box-shadow:
-			inset 0 1px 0 var(--secondary-highlight),
-			0 0 0 1px color-mix(in oklch, var(--primary) 45%, var(--secondary-edge)),
-			0 1px 2px oklch(0% 0 0 / 0.12);
+		background: color-mix(in oklch, var(--foreground) 8%, transparent);
 	}
 	.btn-ghost {
 		@apply text-muted-foreground hover:bg-accent hover:text-foreground;
 	}
 	.btn-danger {
-		background: linear-gradient(var(--danger-solid-top), var(--danger-solid-bottom));
-		color: oklch(98.5% 0 0);
-		box-shadow:
-			inset 0 1px 0 oklch(100% 0 0 / 0.14),
-			0 0 0 1px var(--danger-solid-edge),
-			0 1px 2px oklch(0% 0 0 / 0.2);
+		color: var(--danger-ink);
+		background: color-mix(in oklch, var(--danger) 13%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--danger) 38%, transparent);
 	}
 	.btn-danger:hover {
-		filter: brightness(1.08);
+		background: color-mix(in oklch, var(--danger) 22%, transparent);
 	}
-	/* Outlined danger: a secondary button with a red edge and label. */
+	/* Outlined danger: the danger edge and label without the fill, until hovered. */
 	.btn-danger-outline {
-		@apply text-danger;
-		background: linear-gradient(var(--secondary-top), var(--secondary-bottom));
-		box-shadow:
-			inset 0 1px 0 var(--secondary-highlight),
-			0 0 0 1px color-mix(in oklch, var(--danger) 55%, var(--secondary-edge)),
-			0 1px 2px oklch(0% 0 0 / 0.12);
+		color: var(--danger-ink);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--danger) 38%, transparent);
 	}
 	.btn-danger-outline:hover {
-		@apply bg-danger/10;
+		background: color-mix(in oklch, var(--danger) 13%, transparent);
 	}
 	/* Compact size for dense toolbars (grid, editor, tables). */
 	.btn-sm {
-		@apply h-7 gap-1.5 rounded-lg px-2.5 text-xs has-[>svg]:px-2 [&_svg]:size-3.5;
+		@apply h-7 gap-1.5 rounded-md px-2.5 text-xs has-[>svg]:px-2 [&_svg]:size-3.5;
 	}
 	.btn-icon {
 		@apply size-9 px-0 has-[>svg]:px-0;
