@@ -193,9 +193,9 @@ export default async function Dashboard() {
                   <Link href="/settings/devices" className="btn btn-primary">
                     Create an API key
                   </Link>
-                  <a href="https://vitafortis.github.io/debrief/docs.html#10-set-up-recording-on-each-desktop" className="btn btn-secondary" target="_blank" rel="noreferrer">
+                  <Link href="/settings/devices#recorder" className="btn btn-secondary">
                     Get the recorder
-                  </a>
+                  </Link>
                 </div>
               }
             />
