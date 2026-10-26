@@ -2,21 +2,32 @@ name: Recorder
 
 # Builds Debrief Recorder for macOS (universal: Apple silicon and Intel) and
 # Windows. Unsigned for now. Every build's installers are kept as workflow
-# artifacts; a tag recorder-v1.2.3 also publishes them as a GitHub release.
+# artifacts, and every push to main publishes them as the latest GitHub
+# release. The version is major.minor from tauri.conf.json, with this
+# workflow's run number as the patch: bump the minor there for a new series.
 on:
   push:
     branches: [main]
     paths: ["recorder/**", ".github/workflows/recorder.yml"]
-    tags: ["recorder-v*"]
   pull_request:
-    paths: ["recorder/**"]
+    paths: ["recorder/**", ".github/workflows/recorder.yml"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=$(jq -r .version recorder/src-tauri/tauri.conf.json | cut -d. -f1,2).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +47,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
+        shell: bash
         working-directory: recorder
     steps:
       - uses: actions/checkout@v4
@@ -54,24 +66,35 @@ jobs:
         working-directory: recorder/src-tauri
         run: cargo test
       - name: Build
-        run: pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: debrief-recorder-${{ runner.os }}
-          path: ${{ matrix.files }}
-          retention-days: 30
+        run: |
+          echo '{"version":"${{ needs.version.outputs.version }}"}' > version.json
+          pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config version.json
       # The same file names every release, so releases/latest/download/<name> always works (Settings → Devices & keys links there).
       - name: Name the installer
-        if: startsWith(github.ref, 'refs/tags/recorder-v')
-        shell: bash
         working-directory: .
         run: |
           mkdir dist
           cp ${{ matrix.files }} dist/Debrief-Recorder-${{ runner.os }}${{ matrix.ext }}
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/recorder-v')
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: debrief-recorder-${{ runner.os }}
+          path: dist/*
+          retention-days: 30
+
+  release:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: recorder-v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Debrief Recorder ${{ needs.version.outputs.version }}
+          make_latest: true
           files: dist/*
-          name: Debrief Recorder ${{ github.ref_name }}
           body: Unsigned builds. macOS — open the .dmg, drag to Applications, then right-click → Open the first time. Windows — run the installer; SmartScreen → More info → Run anyway.
