@@ -232,7 +232,7 @@ Each calendar has a default destination (Settings → Calendars → *Tasks go to
 ### 10. Set up recording on each desktop
 
 1. In Debrief, open **Settings → Devices & keys** and create a key for this computer (e.g. *Work MacBook*). Copy it; it's shown once.
-2. Download the recorder from the same page (**Mac** or **Windows**), or from the [latest release](https://github.com/vitafortis/debrief/releases/latest). Builds from `main` that aren't released yet are on the [Recorder workflow's runs](https://github.com/vitafortis/debrief/actions/workflows/recorder.yml).
+2. Download the recorder from the same page (**Mac** or **Windows**), or from the [latest release](https://github.com/vitafortis/debrief/releases/latest).
    - **Mac:** open the `.dmg` and drag **Debrief Recorder** to Applications. It isn't signed yet, so the first time, right-click it → **Open** → **Open**. (If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/Debrief Recorder.app"`.)
    - **Windows:** run the installer. SmartScreen warns about an unsigned app: **More info → Run anyway**.
 3. It opens its Settings window the first time (later: the waveform icon in the menu bar or tray → **Settings…**):
