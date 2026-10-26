@@ -25,14 +25,14 @@ jobs:
             target: universal-apple-darwin
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
             bundles: app,dmg
-            files: |
-              recorder/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            ext: .dmg
+            files: recorder/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             rust_targets: x86_64-pc-windows-msvc
             bundles: nsis
-            files: |
-              recorder/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            ext: .exe
+            files: recorder/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -60,10 +60,18 @@ jobs:
           name: debrief-recorder-${{ runner.os }}
           path: ${{ matrix.files }}
           retention-days: 30
+      # The same file names every release, so releases/latest/download/<name> always works (Settings → Devices & keys links there).
+      - name: Name the installer
+        if: startsWith(github.ref, 'refs/tags/recorder-v')
+        shell: bash
+        working-directory: .
+        run: |
+          mkdir dist
+          cp ${{ matrix.files }} dist/Debrief-Recorder-${{ runner.os }}${{ matrix.ext }}
       - name: Release
         if: startsWith(github.ref, 'refs/tags/recorder-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.files }}
+          files: dist/*
           name: Debrief Recorder ${{ github.ref_name }}
           body: Unsigned builds. macOS — open the .dmg, drag to Applications, then right-click → Open the first time. Windows — run the installer; SmartScreen → More info → Run anyway.
