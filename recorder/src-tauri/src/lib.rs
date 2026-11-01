@@ -260,8 +260,6 @@ fn refresh_tray(app: &AppHandle) {
             let _ = t.toggle.set_text(if recording { "Stop recording" } else { "Start recording" });
             let _ = t.uploads.set_text(&uploads);
             let _ = t.icon.set_icon(Some(icons::tray(recording)));
-            #[cfg(target_os = "macos")]
-            let _ = t.icon.set_icon_as_template(!recording);
             let _ = t.icon.set_tooltip(Some(&label));
         }
         drop(tray);
@@ -279,6 +277,7 @@ fn open_settings(app: &AppHandle) {
         .title("Debrief Recorder")
         .inner_size(560.0, 720.0)
         .min_inner_size(440.0, 480.0)
+        .skip_taskbar(true)
         .build()
     {
         Ok(w) => {
@@ -300,7 +299,6 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&status, &toggle, &sep()?, &uploads, &open, &folder, &sep()?, &settings, &quit])?;
     let icon = TrayIconBuilder::with_id("main")
         .icon(icons::tray(false))
-        .icon_as_template(true)
         .tooltip("Debrief Recorder")
         .menu(&menu)
         .show_menu_on_left_click(true)
@@ -557,15 +555,20 @@ pub fn run() {
             });
             Ok(())
         })
-        .on_window_event(|w, e| {
+        .on_window_event(|w, e| match e {
             // Closing a window hides it; the app lives in the tray.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = w.hide();
                 if w.label() == "prompt" {
                     let _ = answer_prompt(w.app_handle().clone(), "close".into(), None);
                 }
             }
+            // Settings tucks back into the tray when you click elsewhere, like a menu bar app.
+            tauri::WindowEvent::Focused(false) if w.label() == "settings" => {
+                let _ = w.hide();
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
