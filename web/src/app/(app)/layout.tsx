@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { buildInfo, listContexts, serviceHealth, taskCounts, updateAvailable } from "@debrief/core";
+import { inArray, sql } from "drizzle-orm";
+import { buildInfo, listContexts, recordings, serviceHealth, taskCounts, updateAvailable } from "@debrief/core";
 import { db } from "@/lib/db";
 import { authMode, viewer } from "@/lib/auth";
 import { currentContext } from "@/lib/context";
@@ -14,7 +15,13 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const v = await viewer();
   if (!v) redirect("/login");
-  const [contexts, counts, context, services] = await Promise.all([listContexts(db()), taskCounts(db()), currentContext(), serviceHealth(db())]);
+  const [contexts, counts, context, services, [busy]] = await Promise.all([
+    listContexts(db()),
+    taskCounts(db()),
+    currentContext(),
+    serviceHealth(db()),
+    db().select({ n: sql<number>`count(*)::int` }).from(recordings).where(inArray(recordings.status, ["pending", "processing"])),
+  ]);
   const b = buildInfo();
   const update = updateAvailable();
   const build: BuildStatus = {
@@ -33,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         contexts={contexts}
         context={context}
         pendingTasks={counts.pending ?? 0}
+        transcribing={busy?.n ?? 0}
         build={build}
       >
         {children}

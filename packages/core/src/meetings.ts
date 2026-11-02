@@ -9,6 +9,7 @@ import {
   tasks,
   transcriptEvents,
   transcripts,
+  uploads,
   DEVICE_COLORS,
   type DeviceColor,
   type RecordingStatus,
@@ -183,6 +184,16 @@ export async function getMeeting(db: Db, transcriptId: string) {
 }
 
 export type Meeting = NonNullable<Awaited<ReturnType<typeof getMeeting>>>;
+
+/** Recordings the desktop recorder is still sending: being recorded now, or cut off before the end. */
+export async function listUploading(db: Db) {
+  return db
+    .select({ id: uploads.id, device: uploads.device, title: uploads.title, bytes: uploads.bytes, startedAt: uploads.startedAt, updatedAt: uploads.updatedAt })
+    .from(uploads)
+    .where(eq(uploads.status, "recording"))
+    .orderBy(desc(uploads.startedAt))
+    .limit(20);
+}
 
 /** Recordings not transcribed yet, or that failed, for the queue on the dashboard. */
 export async function listQueue(db: Db) {

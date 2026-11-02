@@ -66,6 +66,7 @@ export function Shell({
   contexts,
   context,
   pendingTasks,
+  transcribing,
   build,
 }: {
   children: React.ReactNode;
@@ -74,6 +75,8 @@ export function Shell({
   contexts: string[];
   context: string | null;
   pendingTasks: number;
+  /** Recordings waiting for or in the transcriber: a count beside Meetings. */
+  transcribing: number;
   build: BuildStatus;
 }) {
   const pathname = usePathname();
@@ -117,6 +120,12 @@ export function Shell({
                 {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-primary" />}
                 <n.icon className="size-4 shrink-0" />
                 {!collapsed && <span className="flex-1">{n.label}</span>}
+                {!collapsed && n.href === "/meetings" && transcribing > 0 && (
+                  <span title={`${transcribing} transcribing or queued`} className="flex items-center gap-1 rounded-md bg-muted px-1.5 font-mono text-[0.6875rem] text-muted-foreground tabular-nums">
+                    <span className="dot-busy size-1.5 rounded-full" />
+                    {transcribing}
+                  </span>
+                )}
                 {!collapsed && n.href === "/tasks" && pendingTasks > 0 && (
                   <span className="rounded-md bg-primary-soft px-1.5 font-mono text-[0.6875rem] text-primary tabular-nums">{pendingTasks}</span>
                 )}

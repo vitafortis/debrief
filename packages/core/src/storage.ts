@@ -12,7 +12,7 @@ import { pipeline } from "node:stream/promises";
 import { AwsClient } from "aws4fetch";
 import { and, eq, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import type { Db } from "./db";
-import { recordings, type RecordingStorage } from "./schema";
+import { recordings, uploads, type RecordingStorage } from "./schema";
 import { setting, settingNumber } from "./settings";
 
 /** The server's own recordings volume. */
@@ -91,6 +91,12 @@ export async function presignedAudioUrl(key: string, seconds = 3600) {
   const url = new URL(c.url(key));
   url.searchParams.set("X-Amz-Expires", String(seconds));
   return (await c.client.sign(url, { method: "GET", aws: { signQuery: true } })).url;
+}
+
+async function s3Delete(key: string) {
+  const c = needS3();
+  const res = await c.client.fetch(c.url(key), { method: "DELETE" });
+  if (res.status !== 404) await s3Check(res, `delete of ${key}`);
 }
 
 async function s3Download(key: string, dest: string) {
@@ -243,6 +249,61 @@ export async function pruneLocalCopies(db: Db, now = new Date()) {
     await removeEmptyDirs(path.dirname(full), root);
   }
   return done.length;
+}
+
+// ── Deleting ──────────────────────────────────────────────────────────────
+
+/** Removes a file, then its folder's sidecar if nothing else is left, then the empty folders. */
+async function removeFile(root: string, rel: string) {
+  const full = inRoot(root, rel);
+  if ((await sizeOf(full)) === null) return;
+  await fs.promises.rm(/*turbopackIgnore: true*/ full, { force: true });
+  const dir = path.dirname(full);
+  const left = await fs.promises.readdir(/*turbopackIgnore: true*/ dir).catch(() => [] as string[]);
+  if (left.length === 1 && left[0] === "metadata.json") await fs.promises.rm(/*turbopackIgnore: true*/ path.join(dir, left[0]), { force: true });
+  await removeEmptyDirs(dir, root);
+}
+
+/** The transcriber's .txt and .json and the .notes.md, in the day's export folder (the day either side, for time zones). */
+async function removeExports(id: string, recordedAt: Date) {
+  const root = exportsDir();
+  if (!root) return;
+  const tag = `-${id.slice(0, 8)}.`;
+  for (const n of [-1, 0, 1]) {
+    const dir = path.join(root, new Date(recordedAt.getTime() + n * 86400_000).toISOString().slice(0, 10));
+    for (const f of await fs.promises.readdir(/*turbopackIgnore: true*/ dir).catch(() => [] as string[])) {
+      if (f.includes(tag) && /\.(txt|json|notes\.md)$/.test(f)) await fs.promises.rm(/*turbopackIgnore: true*/ path.join(dir, f), { force: true });
+    }
+  }
+}
+
+/**
+ * Deletes a recording everywhere Debrief keeps it: the audio on the server,
+ * in the NAS folder and in S3, the exported transcript and notes, then the
+ * recording with its transcript, summary and action items. The files go
+ * first, so a watched NAS folder can't bring it back; if one can't be
+ * deleted, nothing else is.
+ */
+export async function deleteRecording(db: Db, id: string) {
+  const [r] = await db.select().from(recordings).where(eq(recordings.id, id));
+  if (!r) return false;
+  await removeFile(recordingsDir(), r.filePath);
+  const folder = folderDir();
+  if (folder) await removeFile(folder, r.filePath);
+  if (r.storage === "s3") {
+    await s3Delete(r.filePath);
+    await s3Delete(`${path.posix.dirname(r.filePath)}/metadata.json`);
+  }
+  await removeExports(r.id, r.recordedAt);
+  await db.transaction(async (tx) => {
+    // A recorder still sending it is told it's finished, instead of starting it again.
+    await tx
+      .update(uploads)
+      .set({ status: "deleted", updatedAt: new Date() })
+      .where(and(eq(uploads.folder, path.posix.dirname(r.filePath)), eq(uploads.fileName, path.posix.basename(r.filePath))));
+    await tx.delete(recordings).where(eq(recordings.id, id));
+  });
+  return true;
 }
 
 /** Writes and deletes a small file in the archive, to check the settings work. */

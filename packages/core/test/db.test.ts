@@ -355,3 +355,52 @@ test("calendars added with the same ID are turned on again rather than doubled",
   assert.equal(rows.length, 1);
   assert.equal(rows[0].enabled, true);
 });
+
+test("deleting a recording removes its audio, archive copy, exports and transcript, and stops the recorder sending it", { skip }, async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { Readable } = await import("node:stream");
+  const up = await import("../src/uploads");
+  const st = await import("../src/storage");
+  const db = core!.getDb();
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-local-"));
+  const nas = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-nas-"));
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "debrief-out-"));
+  process.env.RECORDINGS_DIR = local;
+  process.env.AUDIO_DIR = nas;
+  process.env.EXPORT_DIR = out;
+  try {
+    const id = "3b8f1c2a-0000-4000-8000-000000000003";
+    await up.startUpload(db, id, { device: "laptop", startedAt: "2026-10-23T15:00:00Z", format: "opus" }, null, local);
+    await up.appendUpload(db, id, 0, Readable.from([Buffer.from("secret")]), 6, local);
+    await up.finishUpload(db, id, { bytes: 6, durationSecs: 30 }, local);
+    const [u] = await db.select().from(core!.uploads).where(sql`id = ${id}`);
+    const rel = `${u.folder}/audio.opus`;
+    const [rec] = await db.select().from(core!.recordings).where(sql`file_path = ${rel}`);
+    await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Something sensitive." });
+    // An archive copy with its sidecar, and the exports.
+    fs.mkdirSync(path.join(nas, u.folder), { recursive: true });
+    fs.writeFileSync(path.join(nas, rel), "secret");
+    fs.writeFileSync(path.join(nas, u.folder, "metadata.json"), "{}");
+    fs.mkdirSync(path.join(out, "2026-10-23"));
+    for (const f of [`call-${rec.id.slice(0, 8)}.txt`, `call-${rec.id.slice(0, 8)}.json`, `call-${rec.id.slice(0, 8)}.notes.md`, "other-12345678.txt"]) fs.writeFileSync(path.join(out, "2026-10-23", f), "x");
+
+    assert.equal(await st.deleteRecording(db, rec.id), true);
+    assert.equal((await db.select().from(core!.recordings).where(sql`id = ${rec.id}`)).length, 0);
+    assert.equal((await db.select().from(core!.transcripts).where(sql`recording_id = ${rec.id}`)).length, 0);
+    assert.ok(!fs.existsSync(path.join(local, "laptop")));
+    assert.ok(!fs.existsSync(path.join(nas, "laptop")));
+    assert.deepEqual(fs.readdirSync(path.join(out, "2026-10-23")), ["other-12345678.txt"]);
+    // The recorder is told it's finished, and finishing again doesn't bring it back.
+    await assert.rejects(up.appendUpload(db, id, 6, Readable.from([Buffer.from("more")]), 4, local), (e: InstanceType<typeof up.UploadError>) => e.status === 409 && /finished/.test(e.message));
+    assert.equal((await up.finishUpload(db, id, { bytes: 6, durationSecs: 30 }, local))!.status, "deleted");
+    assert.equal((await db.select().from(core!.recordings).where(sql`file_path = ${rel}`)).length, 0);
+    assert.equal(await st.deleteRecording(db, rec.id), false);
+  } finally {
+    delete process.env.RECORDINGS_DIR;
+    delete process.env.AUDIO_DIR;
+    delete process.env.EXPORT_DIR;
+    for (const d of [local, nas, out]) fs.rmSync(d, { recursive: true, force: true });
+  }
+});
