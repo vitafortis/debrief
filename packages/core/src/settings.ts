@@ -20,7 +20,7 @@ export type SettingDef = {
   label: string;
   type: "text" | "secret" | "number" | "bool" | "select" | "textarea";
   default?: string;
-  /** For a select; `detail` is the second line when it's shown as tiles. */
+  /** For a select, or the suggestions for a text setting (a dropdown with Other…); `detail` is the tile's second line or the option's note. */
   options?: { value: string; label: string; detail?: string }[];
   placeholder?: string;
   help?: string;
@@ -168,14 +168,13 @@ export const SETTINGS: SettingDef[] = [
     section: "Connection",
     label: "Model",
     type: "text",
-    display: "tiles",
     default: "claude-haiku-5-5",
     options: [
-      { value: "claude-haiku-5-5", label: "Haiku 5.5", detail: "Cheapest, and plenty for summaries. About $0.003 a meeting." },
-      { value: "claude-sonnet-5-5", label: "Sonnet 5.5", detail: "Sharper on long, messy calls. About $0.06 a meeting." },
-      { value: "claude-opus-5-5", label: "Opus 5.5", detail: "The most capable. About $0.11 a meeting." },
+      { value: "claude-haiku-5-5", label: "Haiku 5.5", detail: "cheapest, about $0.003 a meeting" },
+      { value: "claude-sonnet-5-5", label: "Sonnet 5.5", detail: "sharper on long calls, about $0.06" },
+      { value: "claude-opus-5-5", label: "Opus 5.5", detail: "most capable, about $0.11" },
     ],
-    help: "Per hour-long meeting, at Anthropic's list prices.",
+    help: "Cost per hour-long meeting at Anthropic's list prices. Haiku is plenty for summaries.",
     when: PROVIDER("anthropic"),
   },
   {
@@ -184,12 +183,11 @@ export const SETTINGS: SettingDef[] = [
     section: "Connection",
     label: "Model",
     type: "text",
-    display: "tiles",
     default: "gpt-5-mini",
     options: [
-      { value: "gpt-5-nano", label: "GPT-5 nano", detail: "Cheapest." },
-      { value: "gpt-5-mini", label: "GPT-5 mini", detail: "Cheap, and good at summaries." },
-      { value: "gpt-5", label: "GPT-5", detail: "The most capable, and the dearest." },
+      { value: "gpt-5-nano", label: "GPT-5 nano", detail: "cheapest" },
+      { value: "gpt-5-mini", label: "GPT-5 mini", detail: "cheap, good at summaries" },
+      { value: "gpt-5", label: "GPT-5", detail: "most capable, dearest" },
     ],
     when: PROVIDER("openai"),
   },
@@ -199,12 +197,11 @@ export const SETTINGS: SettingDef[] = [
     section: "Connection",
     label: "Model",
     type: "text",
-    display: "tiles",
     default: "gemini-2.5-flash",
     options: [
-      { value: "gemini-2.5-flash-lite", label: "Flash-Lite", detail: "Cheapest." },
-      { value: "gemini-2.5-flash", label: "Flash", detail: "Cheap, and good at summaries." },
-      { value: "gemini-2.5-pro", label: "Pro", detail: "The most capable, and the dearest." },
+      { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", detail: "cheapest" },
+      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", detail: "cheap, good at summaries" },
+      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", detail: "most capable, dearest" },
     ],
     when: PROVIDER("gemini"),
   },

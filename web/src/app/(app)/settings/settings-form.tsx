@@ -271,6 +271,7 @@ function Control({ f, id, value, cleared, onChange, onClear }: { f: Field; id: s
       </select>
     );
   }
+  if (f.type === "text" && f.options) return <SuggestedText f={f} id={id} value={value} onChange={onChange} />;
   if (f.type === "textarea")
     return (
       <div className="space-y-2">
@@ -327,33 +328,64 @@ function Control({ f, id, value, cleared, onChange, onClear }: { f: Field; id: s
 
 function TileField({ f, value, onChange }: { f: Field; value: string; onChange: (v: string) => void }) {
   const options = f.options ?? [];
-  const known = options.some((o) => o.value === value);
-  // A free-text setting (a model) takes any name in the box under the tiles; a choice from .env or an older version shows as its own tile.
-  const all = known || f.type === "text" ? options : [...options, { value, label: value, detail: "Set by name" }];
+  // A value from .env or an older version that isn't one of the tiles still shows, as its own tile.
+  const all = options.some((o) => o.value === value) ? options : [...options, { value, label: value, detail: "Set by name" }];
   return (
     <div className="space-y-1.5">
       <Tiles label={f.label} value={value} onChange={onChange} disabled={f.source === "env"} options={all.map((o) => ({ value: o.value, title: o.label, detail: o.detail }))} />
-      {f.type === "text" && f.source !== "env" && (
-        <div className="flex items-center gap-2 pt-0.5">
-          <label htmlFor={`s-${f.key}-other`} className="shrink-0 text-[0.6875rem] text-muted-foreground">
-            Or another model
-          </label>
-          <input
-            id={`s-${f.key}-other`}
-            className={`input h-7 min-w-0 flex-1 font-mono text-[0.6875rem] ${known ? "" : "border-primary"}`}
-            placeholder="its exact name"
-            value={known ? "" : value}
-            onChange={(e) => onChange(e.target.value.trim() || (f.default ?? ""))}
-          />
-        </div>
-      )}
-      {f.type === "text" && f.source === "env" && !known && <p className="px-0.5 font-mono text-[0.6875rem] text-muted-foreground">{value}</p>}
       {f.source === "env" && (
         <p className="flex items-center gap-1.5 px-0.5 text-[0.6875rem] text-muted-foreground">
           <Lock className="size-3" /> Set by {f.key} in the environment.
         </p>
       )}
       {f.help && f.source !== "env" && <p className="px-0.5 text-[0.6875rem] text-muted-foreground">{f.help}</p>}
+    </div>
+  );
+}
+
+const OTHER = "__other";
+
+/** A text setting with suggestions (a model): pick one, or Other… and type any name. */
+function SuggestedText({ f, id, value, onChange }: { f: Field; id: string; value: string; onChange: (v: string) => void }) {
+  const options = f.options ?? [];
+  const known = options.some((o) => o.value === value);
+  const [other, setOther] = useState(!known && !!value);
+  const showOther = other || (!known && !!value);
+  return (
+    <div className="space-y-2">
+      <select
+        id={id}
+        className="input h-8 text-xs"
+        value={showOther ? OTHER : value}
+        onChange={(e) => {
+          if (e.target.value === OTHER) {
+            setOther(true);
+            onChange("");
+          } else {
+            setOther(false);
+            onChange(e.target.value);
+          }
+        }}
+      >
+        {!showOther && !known && <option value={value}>Choose…</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.detail ? `${o.label} · ${o.detail}` : o.label}
+          </option>
+        ))}
+        <option value={OTHER}>Other…</option>
+      </select>
+      {showOther && (
+        <input
+          className="input h-8 font-mono text-xs"
+          aria-label={`${f.label} name`}
+          placeholder="Its exact name, e.g. claude-haiku-4-5"
+          autoComplete="off"
+          autoFocus={other && !value}
+          value={value}
+          onChange={(e) => onChange(e.target.value.trim())}
+        />
+      )}
     </div>
   );
 }
