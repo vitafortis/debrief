@@ -17,7 +17,11 @@ export function clock(secs: number) {
 
 export function speakerName(names: Record<string, string>, speaker: string | null) {
   if (!speaker) return "Unknown";
-  return names[speaker] || speaker.replace(/^SPEAKER_0*(\d+)$/, (_, n) => `Speaker ${Number(n) + 1}`);
+  if (names[speaker]) return names[speaker];
+  // Debrief Recorder recordings label your side YOU, and the call's OTHERS when nobody on it is told apart.
+  if (speaker === "YOU") return setting("OWNER_NAME") || "You";
+  if (speaker === "OTHERS") return "Others on the call";
+  return speaker.replace(/^SPEAKER_0*(\d+)$/, (_, n) => `Speaker ${Number(n) + 1}`);
 }
 
 /** The transcript as plain text, one speaker turn per line with its time, for Claude or an export. */

@@ -49,7 +49,7 @@ Claude (MCP, API key)       ────────▶ mcp-server    search, re
 
 1. **Recording.** The Debrief Recorder runs in the menu bar (Mac) or tray (Windows). When an app takes the microphone, it asks whether to record, records straight away, or ignores it, depending on that app's rule. It records your microphone and the computer's audio (the other side of the call), so nothing joins the call.
 2. **Streaming up.** The recording goes to Debrief in chunks while the meeting runs, with an API key, so it works away from home too. It's written to disk first: if the connection drops, recording carries on and the upload resumes where it stopped. The server keeps it in its recordings volume.
-3. **Transcribing.** As soon as the upload finishes, the **transcriber** picks it up. faster-whisper transcribes it; with a Hugging Face token, pyannote also labels who is speaking. The transcript goes to Postgres.
+3. **Transcribing.** As soon as the upload finishes, the **transcriber** picks it up. faster-whisper transcribes it. A Debrief Recorder recording keeps your microphone and the call on separate channels, so each side is transcribed on its own: your lines are marked as yours, overlaps included, and anything from the call that your microphone picked up (on speakers rather than headphones) is left out. With a Hugging Face token, pyannote also tells apart the people on the call. The transcript goes to Postgres.
 4. **Matching.** **calendar-sync** links each new transcript to the calendar event it overlaps. Overlap is measured against the shorter of the two and 70% is enough, so joining late or leaving early still matches; a recording that spans two back-to-back meetings links to both.
 5. **Contexts.** Each calendar has a **context**, a short word such as `work` or `side`. It filters every page and sets where that calendar's tasks go by default. A meeting with no calendar event can take its context from the device it was recorded on, if you set one for that device.
 6. **Summary and action items.** With an Anthropic API key, Claude summarizes each new meeting and pulls out its action items as soon as it's matched. (Or ask Claude to, through MCP.) The summary and action items are posted to Slack.
@@ -198,7 +198,7 @@ In Settings → Calendars, add each calendar with a context, one short word like
 2. Accept the terms on [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1).
 3. Create a **Read** token under Settings → Access Tokens and paste it into Debrief's Settings → Transcription.
 
-Without it, transcripts work the same but every line is unattributed.
+Without it, transcripts work the same, but the other people on a call aren't told apart: a Debrief Recorder recording shows your lines and everyone else's as *Others*, and a recording from anywhere else has no speakers at all.
 
 ### 9. Summaries, Slack and tasks (optional)
 

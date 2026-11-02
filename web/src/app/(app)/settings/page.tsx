@@ -3,6 +3,7 @@ import Link from "next/link";
 import { desc, eq, sql } from "drizzle-orm";
 import { archiveTarget, autoExtract, calendars, extractionAvailable, integrationStatus, recordings, setting, settingNumber, slackConfigured } from "@debrief/core";
 import { db } from "@/lib/db";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { authMode, oidcEnabled, oidcName } from "@/lib/auth";
 import { fmtAgo } from "@/lib/format";
 import { fieldsFor } from "./fields";
@@ -39,6 +40,7 @@ export default async function GeneralSettings() {
 
   return (
     <>
+      <AutoRefresh active={!!(counts.pending || counts.processing)} />
       <SettingsForm title="General" fields={fields} />
 
       <section className="card overflow-hidden">

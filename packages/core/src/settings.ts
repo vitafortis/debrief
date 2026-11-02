@@ -93,7 +93,7 @@ export const SETTINGS: SettingDef[] = [
   { key: "CPU_THREADS", group: "transcription", label: "CPU threads", type: "number", default: "0", help: "0 uses every core." },
   { key: "LANGUAGE", group: "transcription", label: "Language", type: "text", placeholder: "Detected; or e.g. en" },
   { key: "BEAM_SIZE", group: "transcription", label: "Beam size", type: "number", default: "5", help: "Lower is faster, higher a little more accurate." },
-  { key: "HF_TOKEN", group: "transcription", label: "Hugging Face token", type: "secret", help: "Turns on speaker labels. Accept the terms of pyannote/speaker-diarization-community-1 first." },
+  { key: "HF_TOKEN", group: "transcription", label: "Hugging Face token", type: "secret", help: "Turns on speaker labels, telling apart the people on a call. (Debrief Recorder recordings mark your own lines either way.) Accept the terms of pyannote/speaker-diarization-community-1 first." },
   {
     key: "DIARIZE",
     group: "transcription",

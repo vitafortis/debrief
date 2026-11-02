@@ -7,6 +7,7 @@ import { currentContext } from "@/lib/context";
 import { addDays, fmt, fmtTime, isoDay, minutesOfDay, startOfDay, zonedMidnight } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { EmptyState, PageHeader, StatusDot } from "@/components/ui";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -73,6 +74,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
+      <AutoRefresh active={events.some((e) => e.status === "pending" || e.status === "processing")} />
       <PageHeader
         title="Calendar"
         description={`${rangeFmt.format(start)}${context ? ` · ${context}` : ""}`}
