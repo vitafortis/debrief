@@ -191,7 +191,7 @@ test("settings: saved values apply, the environment wins, secrets aren't shown",
     delete process.env.ANTHROPIC_MODEL;
   }
   await s.saveSettings(db, { ANTHROPIC_MODEL: null, SLACK_WEBHOOK_URL: "" });
-  assert.equal(s.setting("ANTHROPIC_MODEL"), "claude-sonnet-5-5");
+  assert.equal(s.setting("ANTHROPIC_MODEL"), "claude-haiku-5-5");
   await assert.rejects(s.saveSettings(db, { NOT_A_SETTING: "x" }));
 
   assert.equal(s.ownerPasswordSet(), false);

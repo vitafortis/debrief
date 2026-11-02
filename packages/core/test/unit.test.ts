@@ -132,19 +132,46 @@ test("S3 links are path-style, presigned and expire", async () => {
 
 // ── AI providers ──────────────────────────────────────────────────────────
 
-import { plainSchema, toolInput, toolRequest } from "../src/ai";
+import { plainSchema, structuredSchema, toolInput, toolRequest } from "../src/ai";
 import { newerVersion, versionFromRun } from "../src/system";
 import { explainCalendarError } from "../src/calendar-sync";
 
 const tool = { name: "save", description: "Save it.", schema: { $schema: "x", type: "object", additionalProperties: false, properties: { a: { type: "string" } } } };
 const req = { system: "sys", user: "hi", tool, maxTokens: 100 };
 
-test("Anthropic is asked for a forced tool call with its own headers", () => {
-  const r = toolRequest({ provider: "anthropic", key: "k", model: "claude-sonnet-5-5", baseUrl: "https://api.anthropic.com/v1" }, req);
+test("Claude is asked for JSON in the tool's shape, or a forced tool call when its model lacks structured outputs", () => {
+  const c = { provider: "anthropic" as const, key: "k", model: "claude-haiku-5-5", baseUrl: "https://api.anthropic.com/v1" };
+  const r = toolRequest(c, req);
   assert.equal(r.url, "https://api.anthropic.com/v1/messages");
   assert.equal(r.headers["x-api-key"], "k");
-  assert.deepEqual(r.body.tool_choice, { type: "tool", name: "save" });
+  assert.equal(r.body.tool_choice, undefined);
   assert.equal(r.body.system, "sys");
+  assert.deepEqual(r.body.output_config, { format: { type: "json_schema", schema: { type: "object", additionalProperties: false, properties: { a: { type: "string" } } } } });
+  const old = toolRequest(c, req, true);
+  assert.deepEqual(old.body.tool_choice, { type: "tool", name: "save" });
+  assert.equal(old.body.output_config, undefined);
+});
+
+test("structured outputs get a schema without limits, every object closed", () => {
+  const schema = {
+    $schema: "x",
+    type: "object",
+    properties: {
+      summary: { type: "string", maxLength: 4000 },
+      // A property named like a keyword stays.
+      pattern: { type: "string" },
+      tasks: { type: "array", maxItems: 50, items: { type: "object", properties: { at: { anyOf: [{ type: "number", minimum: 0 }, { type: "null" }] } } } },
+    },
+  };
+  assert.deepEqual(structuredSchema(schema), {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      summary: { type: "string" },
+      pattern: { type: "string" },
+      tasks: { type: "array", items: { type: "object", additionalProperties: false, properties: { at: { anyOf: [{ type: "number" }, { type: "null" }] } } } },
+    },
+  });
 });
 
 test("OpenAI-style providers get a forced function call; Gemini and your own server get a plain schema", () => {
@@ -164,6 +191,8 @@ test("OpenAI-style providers get a forced function call; Gemini and your own ser
 
 test("the tool's input is read from either kind of reply, or from JSON a model wrote instead", () => {
   assert.deepEqual(toolInput("anthropic", { content: [{ type: "text" }, { type: "tool_use", name: "save", input: { a: "x" } }] }, "save"), { a: "x" });
+  // Structured outputs: the JSON is the text, after any thinking.
+  assert.deepEqual(toolInput("anthropic", { content: [{ type: "thinking", thinking: "" }, { type: "text", text: '{"a":"w"}' }] }, "save"), { a: "w" });
   assert.deepEqual(toolInput("openai", { choices: [{ message: { tool_calls: [{ function: { name: "save", arguments: '{"a":"y"}' } }] } }] }, "save"), { a: "y" });
   assert.deepEqual(toolInput("custom", { choices: [{ message: { content: '```json\n{"a":"z"}\n```' } }] }, "save"), { a: "z" });
   assert.equal(toolInput("custom", { choices: [{ message: { content: "Sorry, I can't." } }] }, "save"), undefined);
