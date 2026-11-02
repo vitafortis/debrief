@@ -225,7 +225,8 @@ export const apiKeys = pgTable("api_keys", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-export const UPLOAD_STATUSES = ["recording", "completed"] as const;
+// "deleted": the recording was deleted in Debrief; the recorder is told it's finished so it stops sending.
+export const UPLOAD_STATUSES = ["recording", "completed", "deleted"] as const;
 export type UploadStatus = (typeof UPLOAD_STATUSES)[number];
 
 /** A recording the desktop recorder is streaming up, into the server's recordings volume. */

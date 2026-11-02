@@ -92,7 +92,7 @@ export async function uploadStatus(db: Db, id: string, root = recordingsDir()) {
   const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
   if (!u) return null;
   // A finished upload may since have moved to the archive.
-  const offset = u.status === "completed" ? u.bytes : await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
+  const offset = u.status !== "recording" ? u.bytes : await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
   const [rec] = await db
     .select({ status: recordings.status, transcriptId: transcripts.id })
     .from(recordings)
@@ -116,8 +116,7 @@ export async function startUpload(db: Db, id: string, input: UploadStart, apiKey
     .insert(devices)
     .values({ name: device, lastSeenAt: new Date() })
     .onConflictDoUpdate({ target: devices.name, set: { lastSeenAt: new Date() } });
-  const dir = resolveInRoot(root, u.folder);
-  await fs.promises.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
+  if (u.status === "recording") await fs.promises.mkdir(/*turbopackIgnore: true*/ resolveInRoot(root, u.folder), { recursive: true });
   return uploadStatus(db, id, root);
 }
 
@@ -138,7 +137,7 @@ export function appendUpload(db: Db, id: string, offset: number, body: ReadableS
   return serialized(id, async () => {
     const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
     if (!u) throw new UploadError("No such upload. Start it first.", 404);
-    if (u.status === "completed") throw new UploadError("This upload is finished.", 409, u.bytes);
+    if (u.status !== "recording") throw new UploadError("This upload is finished.", 409, u.bytes);
     if (length !== null && length > MAX_CHUNK) throw new UploadError(`Send at most ${MAX_CHUNK} bytes at a time.`, 413);
     const file = resolveInRoot(root, path.join(u.folder, u.fileName));
     const size = await sizeOf(file);
@@ -191,6 +190,8 @@ export function finishUpload(db: Db, id: string, input: z.infer<typeof uploadFin
     const i = uploadFinish.parse(input);
     const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
     if (!u) throw new UploadError("No such upload.", 404);
+    // Deleted in Debrief: nothing to queue, and the recorder can stop.
+    if (u.status === "deleted") return uploadStatus(db, id, root);
     if (u.status !== "completed") {
       const size = await sizeOf(resolveInRoot(root, path.join(u.folder, u.fileName)));
       if (size !== i.bytes) throw new UploadError(`Have ${size} of ${i.bytes} bytes.`, 409, size);

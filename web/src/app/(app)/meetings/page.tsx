@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AudioLines, Search, SearchX } from "lucide-react";
-import { deviceBadges, listContexts, listMeetings } from "@debrief/core";
+import { deviceBadges, listContexts, listMeetings, listQueue, listUploading } from "@debrief/core";
 import { db } from "@/lib/db";
 import { currentContext } from "@/lib/context";
 import { addDays, zonedMidnight } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { MeetingRow } from "@/components/meeting-row";
+import { InProgress } from "@/components/in-progress";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const metadata: Metadata = { title: "Meetings" };
 
@@ -29,7 +31,9 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
   const from = day(sp.from);
   const to = day(sp.to);
   const filtering = FILTERS.some((k) => sp[k]?.trim());
-  const [rows, contexts, badges] = await Promise.all([
+  // What isn't a meeting yet shows above the list, on the first page of the plain list.
+  const showQueue = page === 1 && !filtering && !unmatched;
+  const [rows, contexts, badges, queue, uploading] = await Promise.all([
     listMeetings(db(), {
       context: unmatched ? "unmatched" : context,
       q: sp.q,
@@ -42,6 +46,8 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
     }),
     listContexts(db()),
     deviceBadges(db()),
+    showQueue ? listQueue(db()) : [],
+    showQueue ? listUploading(db()) : [],
   ]);
   const more = rows.length > PAGE;
   const list = rows.slice(0, PAGE);
@@ -51,6 +57,7 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
+      <AutoRefresh active={uploading.length > 0 || queue.some((q) => q.status !== "error")} />
       <PageHeader
         title="Meetings"
         description={unmatched ? "Transcripts with no calendar event." : context ? `Transcripts from ${context} calendars.` : "Every transcript, newest first."}
@@ -106,6 +113,12 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
           </div>
         </form>
 
+        <InProgress
+          uploading={uploading}
+          queue={queue.map((q) => ({ id: q.id, title: q.titleHint, device: q.device, recordedAt: q.recordedAt, status: q.status, progress: q.progress, error: q.error }))}
+          badges={badges}
+        />
+
         {list.length ? (
           <div className="grid gap-2">
             {list.map((m) => (
@@ -123,7 +136,7 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
               </Link>
             }
           />
-        ) : (
+        ) : queue.length || uploading.length ? null : (
           <EmptyState icon={AudioLines} title={unmatched ? "Every transcript has its meeting" : "No transcripts yet"} />
         )}
         {(page > 1 || more) && (

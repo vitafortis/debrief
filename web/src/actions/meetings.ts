@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { extractWithAi, linkTranscript, recordings, requestPublish, restoreLocal, slackConfigured, transcripts } from "@debrief/core";
+import { deleteRecording, extractWithAi, linkTranscript, recordings, requestPublish, restoreLocal, slackConfigured, transcripts } from "@debrief/core";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -75,6 +75,14 @@ export async function retranscribe(recordingId: string) {
     await db().execute(sql`select pg_notify('debrief_recording', ${id})`);
     return "Queued for the transcriber.";
   }, "/");
+}
+
+/** Deletes a recording and everything made from it, wherever Debrief keeps it. */
+export async function deleteMeeting(recordingId: string) {
+  return run(async () => {
+    if (!(await deleteRecording(db(), uuid.parse(recordingId)))) throw new Error("It's already gone.");
+    return "Deleted.";
+  }, "/", "/meetings", "/calendar", "/tasks", "/search");
 }
 
 export async function extractTasks(transcriptId: string) {

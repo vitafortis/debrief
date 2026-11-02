@@ -9,7 +9,7 @@ import { fmtDateTime, fmtDay, fmtDuration, fmtTime } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { ContextBadge, StatusBadge } from "@/components/ui";
 import { MeetingPlayer } from "@/components/meeting-player";
-import { EventPicker, MeetingTasks, RetryButton, SlackButton, SpeakerEditor, SummaryEditor, TitleEditor } from "@/components/meeting-panels";
+import { DeleteButton, EventPicker, MeetingTasks, RetryButton, SlackButton, SpeakerEditor, SummaryEditor, TitleEditor } from "@/components/meeting-panels";
 import { AutoRefresh } from "@/components/auto-refresh";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ t?: string; q?: string }> };
@@ -143,11 +143,10 @@ export default async function MeetingPage({ params, searchParams }: Props) {
               {m.recording.device ? `${m.recording.device} · ` : ""}
               {m.transcript.modelVersion ?? "whisper"} · {m.transcript.language ?? "en"}
             </p>
-            {!busy && (
-              <div className="pt-2">
-                <RetryButton recordingId={m.recording.id} />
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 pt-2">
+              {!busy && <RetryButton recordingId={m.recording.id} />}
+              <DeleteButton recordingId={m.recording.id} title={m.displayTitle} then="/meetings" />
+            </div>
           </section>
         </div>
 

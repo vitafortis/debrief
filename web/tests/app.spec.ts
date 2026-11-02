@@ -271,4 +271,23 @@ test.describe("signed in", () => {
     await expect(page.getByText(".env", { exact: true })).toHaveCount(3);
     await expect(page.getByText(/Set by DEBRIEF_PASSWORD in the environment/)).toBeVisible();
   });
+
+  test("meetings: what's still transcribing shows above the list, and a recording can be deleted", async ({ page }) => {
+    await page.goto("/meetings");
+    const queue = page.getByRole("region", { name: "In progress" });
+    await expect(queue.getByText("API v2 design review")).toBeVisible();
+    await expect(queue.getByText("Transcribing")).toBeVisible();
+    // The recording the upload test sent is waiting for the transcriber: delete it from here.
+    page.once("dialog", (d) => d.accept());
+    await queue.getByRole("button", { name: /^Delete Recording from/ }).click();
+    await expect(page.getByText("Deleted.")).toBeVisible();
+    await expect(queue.getByRole("button", { name: /^Delete Recording from/ })).toHaveCount(0);
+
+    // A finished meeting, from its own page.
+    await page.getByRole("link", { name: /Quick call/ }).click();
+    page.once("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "Delete Quick call" }).click();
+    await expect(page).toHaveURL(/\/meetings$/);
+    await expect(page.getByRole("link", { name: /Quick call/ })).toHaveCount(0);
+  });
 });

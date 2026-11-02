@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Check, LoaderCircle, Pencil, Plus, RotateCcw, Send, Sparkles } from "lucide-react";
-import { extractTasks, renameMeeting, renameSpeakers, retranscribe, saveSummary, sendToSlack, setMeetingEvent } from "@/actions/meetings";
+import { useRouter } from "next/navigation";
+import { Check, LoaderCircle, Pencil, Plus, RotateCcw, Send, Sparkles, Trash2 } from "lucide-react";
+import { deleteMeeting, extractTasks, renameMeeting, renameSpeakers, retranscribe, saveSummary, sendToSlack, setMeetingEvent } from "@/actions/meetings";
 import { addTaskToMeeting } from "@/actions/tasks";
 import { TaskItem, useAction, type TaskView } from "@/components/task-item";
 import { speakerLabel } from "@/lib/time";
@@ -152,6 +153,31 @@ export function RetryButton({ recordingId, label = "Transcribe again" }: { recor
   return (
     <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => go(() => retranscribe(recordingId))}>
       <RotateCcw /> {label}
+    </button>
+  );
+}
+
+/** Deletes the recording, its transcript, notes, action items and audio, after asking; `then` is where to go next. */
+export function DeleteButton({ recordingId, title, then, compact }: { recordingId: string; title: string; then?: string; compact?: boolean }) {
+  const [pending, go] = useAction();
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className={`btn btn-sm ${compact ? "btn-ghost" : "btn-danger-outline"}`}
+      disabled={pending}
+      aria-label={`Delete ${title}`}
+      title="Delete"
+      onClick={() =>
+        confirm(`Delete "${title}"?\n\nThe transcript, summary, action items and audio are deleted everywhere Debrief keeps them (the server, the NAS folder or S3, and exports). This can't be undone.`) &&
+        go(
+          () => deleteMeeting(recordingId),
+          () => then && router.replace(then)
+        )
+      }
+    >
+      <Trash2 />
+      {!compact && " Delete"}
     </button>
   );
 }
