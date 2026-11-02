@@ -18,6 +18,8 @@ const LIVE_MIN: u64 = 128 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Status {
+    /// Has a server and an API key; without them nothing is sent.
+    pub configured: bool,
     /// None until the first attempt.
     pub online: Option<bool>,
     pub server: Option<String>,
@@ -28,6 +30,22 @@ pub struct Status {
 pub struct Uploader {
     pub status: Arc<Mutex<Status>>,
     wake: crossbeam_channel::Sender<()>,
+}
+
+/// Debrief stopped waiting for the rest of this recording and transcribed what it had.
+#[derive(Debug)]
+struct Finished;
+
+impl std::fmt::Display for Finished {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("Debrief already finished this recording")
+    }
+}
+
+impl std::error::Error for Finished {}
+
+fn configured(s: &Settings) -> bool {
+    !s.api_key.trim().is_empty() && !s.servers().is_empty()
 }
 
 #[derive(Deserialize)]
@@ -119,6 +137,7 @@ impl Client<'_> {
         let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
         match (status, o.offset) {
             (200, Some(n)) => Ok(n),
+            (409, _) if o.error.as_deref().is_some_and(|e| e.contains("finished")) => Err(Finished.into()),
             // Out of step (a lost reply, a retry): carry on from where the server is.
             (409, Some(n)) => Ok(n),
             _ => Err(anyhow!("{status}: {}", o.error.unwrap_or_default())),
@@ -151,7 +170,18 @@ fn push_one(c: &Client, root: &Path, l: &mut Local, device: &str, live: bool) ->
     }
     while l.uploaded < size {
         let before = l.uploaded;
-        l.uploaded = c.append(l, &file, l.uploaded, size)?;
+        l.uploaded = match c.append(l, &file, l.uploaded, size) {
+            Ok(n) => n,
+            // Nothing more will be taken, so stop trying: it's in Debrief as far as it got.
+            Err(e) if e.is::<Finished>() => {
+                l.done_at = Some(chrono::Utc::now());
+                l.last_error = Some("Debrief stopped waiting for the rest and transcribed what it had.".into());
+                l.save(root)?;
+                log::warn!("Recording {} was finished by Debrief at {before} of {size} bytes", l.id);
+                return Ok(true);
+            }
+            Err(e) => return Err(e),
+        };
         l.save(root)?;
         if l.uploaded == before {
             return Err(anyhow!("the server didn't take any of the chunk"));
@@ -170,7 +200,7 @@ fn push_one(c: &Client, root: &Path, l: &mut Local, device: &str, live: bool) ->
 
 impl Uploader {
     pub fn start(settings: Arc<RwLock<Settings>>, root: Arc<RwLock<PathBuf>>, current: Arc<Mutex<Option<Uuid>>>) -> Self {
-        let status = Arc::new(Mutex::new(Status::default()));
+        let status = Arc::new(Mutex::new(Status { configured: configured(&settings.read().unwrap()), ..Status::default() }));
         let (wake, woken) = crossbeam_channel::bounded::<()>(1);
         let st = status.clone();
         std::thread::Builder::new()
@@ -184,28 +214,41 @@ impl Uploader {
                     let live_id = *current.lock().unwrap();
                     let pending: Vec<Local> = store::list(&dir).into_iter().filter(|l| l.done_at.is_none()).collect();
                     let mut failed = false;
-                    if !pending.is_empty() && !s.api_key.trim().is_empty() && !s.servers().is_empty() {
+                    let ready = configured(&s);
+                    st.lock().unwrap().configured = ready;
+                    if !pending.is_empty() && ready {
                         let mut last_err = None;
                         let mut used = None;
-                        'servers: for server in s.servers() {
+                        for server in s.servers() {
                             let c = Client { agent: agent(), server: &server, key: s.api_key.trim() };
+                            let (mut unreachable, mut stuck) = (None, None);
                             for mut l in pending.clone() {
                                 let live = Some(l.id) == live_id;
                                 if let Err(e) = push_one(&c, &dir, &mut l, &s.device_name, live) {
-                                    log::warn!("Upload to {server} failed: {e:#}");
-                                    last_err = Some(format!("{e}"));
-                                    l.last_error = last_err.clone();
+                                    log::warn!("Upload of {} to {server} failed: {e:#}", l.id);
+                                    let msg = format!("{e}");
+                                    l.last_error = Some(msg.clone());
                                     let _ = l.save(&dir);
-                                    continue 'servers;
+                                    // No connection at all: try the next server with everything.
+                                    if e.downcast_ref::<ureq::Error>().is_some() {
+                                        unreachable = Some(msg);
+                                        break;
+                                    }
+                                    // Something about this one recording: the others still go.
+                                    stuck = Some(msg);
                                 }
                             }
+                            if unreachable.is_some() {
+                                last_err = unreachable;
+                                continue;
+                            }
                             used = Some(server.clone());
-                            last_err = None;
+                            last_err = stuck;
                             break;
                         }
                         failed = last_err.is_some();
                         let mut st = st.lock().unwrap();
-                        st.online = Some(!failed);
+                        st.online = Some(used.is_some());
                         st.server = used;
                         st.last_error = last_err;
                     }

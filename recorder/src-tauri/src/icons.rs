@@ -1,6 +1,6 @@
 //! Tray icons, drawn here so they stay crisp: the Debrief logo (seven bars,
 //! dark blue to light), and a red disc with the same bars in white while
-//! recording.
+//! recording. An amber dot in the corner when uploads can't go through.
 
 use tauri::image::Image;
 
@@ -25,7 +25,10 @@ fn coverage_round_rect(x: f32, y: f32, cx: f32, cy: f32, hw: f32, hh: f32) -> f3
     (0.5 - d).clamp(0.0, 1.0)
 }
 
-pub fn tray(recording: bool) -> Image<'static> {
+/// Where the warning dot sits, and its radius, in pixels.
+const WARN: (f32, f32, f32) = (SIZE as f32 - 8.0, SIZE as f32 - 8.0, 7.5);
+
+pub fn tray(recording: bool, warn: bool) -> Image<'static> {
     let mut px = vec![0u8; (SIZE * SIZE * 4) as usize];
     let c = SIZE as f32 / 2.0;
     // Logo units to pixels: the full icon, or smaller to sit inside the disc.
@@ -55,6 +58,18 @@ pub fn tray(recording: bool) -> Image<'static> {
             } else {
                 px[o..o + 3].copy_from_slice(&rgb);
                 px[o + 3] = (bar * 255.0) as u8;
+            }
+            if warn {
+                // Clear a gap round the dot, then draw it over whatever is there.
+                let d = ((x - WARN.0).powi(2) + (y - WARN.1).powi(2)).sqrt();
+                let gap = (WARN.2 + 2.5 - d + 0.5).clamp(0.0, 1.0);
+                let dot = (WARN.2 - d + 0.5).clamp(0.0, 1.0);
+                let a = px[o + 3] as f32 / 255.0 * (1.0 - gap);
+                let out = a * (1.0 - dot) + dot;
+                for (i, amber) in [0xf5u8, 0xa5, 0x24].into_iter().enumerate() {
+                    px[o + i] = if out > 0.0 { ((px[o + i] as f32 * a * (1.0 - dot) + amber as f32 * dot) / out) as u8 } else { 0 };
+                }
+                px[o + 3] = (out * 255.0) as u8;
             }
         }
     }

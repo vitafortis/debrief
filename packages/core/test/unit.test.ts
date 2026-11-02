@@ -134,7 +134,7 @@ test("S3 links are path-style, presigned and expire", async () => {
 
 import { plainSchema, structuredSchema, toolInput, toolRequest } from "../src/ai";
 import { newerVersion, versionFromRun } from "../src/system";
-import { explainCalendarError } from "../src/calendar-sync";
+import { explainCalendarError, googleIdFromIcs } from "../src/calendar-sync";
 
 const tool = { name: "save", description: "Save it.", schema: { $schema: "x", type: "object", additionalProperties: false, properties: { a: { type: "string" } } } };
 const req = { system: "sys", user: "hi", tool, maxTokens: 100 };
@@ -213,4 +213,10 @@ test("calendar errors say what to do", () => {
   assert.match(explainCalendarError("google", "invalid_grant"), /Connect Google again/);
   assert.match(explainCalendarError("ics", "HTTP 404"), /Copy it again/);
   assert.equal(explainCalendarError("google", "socket hang up"), "socket hang up");
+});
+
+test("a Google calendar's ICS link is recognised as that calendar", () => {
+  assert.equal(googleIdFromIcs("https://calendar.google.com/calendar/ical/sam%40example.com/private-abc123/basic.ics"), "sam@example.com");
+  assert.equal(googleIdFromIcs("webcal://calendar.google.com/calendar/ical/c_9f2e%40group.calendar.google.com/public/basic.ics"), "c_9f2e@group.calendar.google.com");
+  assert.equal(googleIdFromIcs("https://outlook.office365.com/owa/calendar/abc/reachcalendar.ics"), null);
 });

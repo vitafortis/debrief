@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { DEVICE_COLORS, TASK_DESTINATIONS, calendars, createApiKey, deleteApiKey, setDeviceRule, testAi, testArchive } from "@debrief/core";
 import { saveSettings, setOwnerPassword, settingDef, settingNumber, settingSource } from "@debrief/core/settings";
-import { checkCalendar } from "@debrief/core/calendar-sync";
+import { checkCalendar, googleIdFromIcs } from "@debrief/core/calendar-sync";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -54,8 +54,13 @@ export async function addCalendars(list: z.input<typeof newCalendar>[], ctx: str
     const items = z.array(newCalendar).min(1, "Pick a calendar.").max(50).parse(list);
     const c = context.parse(ctx);
     const dest = z.enum(TASK_DESTINATIONS).parse(defaultDestination);
+    // The same Google calendar as its ICS link and through Google would show every meeting twice.
+    const googleId = (c: { source: string; externalId: string }) => (c.source === "google" ? c.externalId : googleIdFromIcs(c.externalId));
+    const existing = await db().select({ source: calendars.source, externalId: calendars.externalId, name: calendars.name, enabled: calendars.enabled }).from(calendars);
     for (const v of items) {
       if (v.source === "ics" && !/^(https?|webcal):\/\//i.test(v.externalId)) return { ok: false, error: "An ICS link starts with https://." };
+      const twin = existing.find((e) => e.enabled && e.source !== v.source && googleId(e) !== null && googleId(e) === googleId(v));
+      if (twin) return { ok: false, error: `${twin.name} is already syncing that calendar${twin.source === "ics" ? " by its ICS link" : " through Google"}. Remove it first to switch.` };
       const externalId = v.source === "ics" ? v.externalId.replace(/^webcal:/i, "https:") : v.externalId;
       const name = v.name || (v.source === "ics" ? `${c} feed` : externalId);
       await db()
