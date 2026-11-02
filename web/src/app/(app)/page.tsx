@@ -146,7 +146,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
   const steps: SetupStep[] = [
     { title: "Install the recorder", detail: "Records your calls and uploads them.", done: !!anyRecording, href: "/settings/devices#recorder", action: "Get it" },
     { title: "Connect a calendar", detail: "Names your meetings and shows what's coming up.", done: calendarConnected, href: "/settings/calendars", action: "Connect" },
-    { title: "Add a Claude API key", detail: "Writes summaries and finds the action items.", done: extractionAvailable(), href: "/settings/claude", action: "Add key" },
+    { title: "Connect an AI provider", detail: "Writes summaries and finds the action items: Claude, OpenAI, Gemini or your own.", done: extractionAvailable(), href: "/settings/ai", action: "Connect" },
     { title: "Speaker labels", detail: "Tells apart the people on a call.", done: !!setting("HF_TOKEN"), href: "/settings/transcription", action: "Set up", optional: true },
     {
       title: "Slack, Akiflow or Linear",

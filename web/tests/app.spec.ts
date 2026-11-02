@@ -165,21 +165,32 @@ test.describe("signed in", () => {
 
   test("settings: a bad ICS link is refused, and a calendar can be switched off", async ({ page }) => {
     await page.goto("/settings/calendars");
-    await page.getByRole("button", { name: "Add" }).click();
-    await page.locator("#cal-source").selectOption("ics");
-    await page.locator("#cal-id").fill("not a link");
-    await page.locator("#cal-ctx").fill("side");
-    await page.getByRole("button", { name: "Add calendar" }).click();
-    await expect(page.getByText("An ICS feed is a link starting with https://.")).toBeVisible();
-    await page.getByLabel("Sync lumen").uncheck();
-    await expect(page.getByText("Off", { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Add a calendar" }).click();
+    await page.getByRole("radio", { name: /Outlook, iCloud or other/ }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByLabel("ICS link").fill("not a link");
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Add and sync" }).click();
+    await expect(page.getByText("An ICS link starts with https://.")).toBeVisible();
+    await page.getByLabel("Sync lumen").click();
+    await expect(page.getByLabel("Sync lumen")).toHaveAttribute("aria-checked", "false");
     await page.goto("/");
     await expect(page.getByRole("button", { name: "lumen" })).toHaveCount(0);
     await page.goto("/settings/calendars");
-    await page.getByLabel("Sync lumen").check();
-    await expect(page.locator("p", { hasText: /^Synced/ })).toHaveCount(2);
+    await page.getByLabel("Sync lumen").click();
+    await expect(page.getByText(/events · synced/)).toHaveCount(2);
     await page.goto("/");
     await expect(page.getByRole("button", { name: "lumen" })).toBeVisible();
+  });
+
+  test("settings: the sections list shows each one's state, and the old addresses still work", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+    await expect(page.getByText("Version", { exact: true })).toBeVisible();
+    await page.goto("/settings/claude");
+    await expect(page).toHaveURL(/\/settings\/ai$/);
+    await page.goto("/settings/recordings");
+    await expect(page).toHaveURL(/\/settings\/storage$/);
   });
 
   test("a key from Settings lets the recorder upload; then its device can be tagged and the key revoked", async ({ page, request }) => {
@@ -219,25 +230,30 @@ test.describe("signed in", () => {
   });
 
   test("settings: a saved setting sticks, a secret isn't shown back, and .env values are locked", async ({ page }) => {
-    await page.goto("/settings/claude");
+    await page.goto("/settings/ai");
+    await expect(page.getByRole("radio", { name: /Anthropic/ })).toHaveAttribute("aria-checked", "true");
     await page.getByLabel("Model").fill("claude-e2e-model");
-    await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-not-real");
+    await page.getByLabel("API key").fill("sk-ant-e2e-not-real");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Model")).toHaveValue("claude-e2e-model");
-    await expect(page.getByLabel("Anthropic API key")).toHaveValue("");
-    await expect(page.getByLabel("Anthropic API key")).toHaveAttribute("placeholder", /Saved/);
+    await expect(page.getByLabel("API key")).toHaveValue("");
+    await expect(page.getByLabel("API key")).toHaveAttribute("placeholder", /Saved/);
     expect(await page.content()).not.toContain("sk-ant-e2e-not-real");
     await page.getByRole("button", { name: "Remove" }).click();
     await page.getByLabel("Model").fill("");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
 
+    // Picking another provider shows its own key and model.
+    await page.getByRole("radio", { name: /OpenAI/ }).click();
+    await expect(page.getByLabel("Model")).toHaveValue("gpt-5-mini");
+    await page.getByRole("button", { name: "Discard" }).click();
+
     // PUBLIC_URL, TZ and OWNER_NAME come from the test server's environment.
-    await page.goto("/settings");
+    await page.goto("/settings/account");
     await expect(page.getByText(".env", { exact: true })).toHaveCount(3);
-    await page.goto("/settings/sign-in");
     await expect(page.getByText(/Set by DEBRIEF_PASSWORD in the environment/)).toBeVisible();
   });
 });

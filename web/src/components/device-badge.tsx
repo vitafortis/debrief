@@ -11,7 +11,7 @@ export const DEVICE_SWATCH: Record<DeviceColor, string> = {
   slate: "oklch(60% 0.03 250)",
 };
 
-/** Which computer a recording came from, as a colored badge with its label (Settings → Devices & keys). */
+/** Which computer a recording came from, as a colored badge with its label (Settings → Recorder & devices). */
 export function DeviceBadge({ badge }: { badge: Badge | undefined }) {
   if (!badge) return null;
   return (

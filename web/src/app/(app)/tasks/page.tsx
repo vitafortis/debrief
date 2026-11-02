@@ -66,7 +66,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
           <EmptyState
             icon={ListChecks}
             title={status === "pending" ? "Nothing to review" : `No ${TABS.find((t) => t.key === status)!.label.toLowerCase()} tasks`}
-            body={status === "pending" ? "New action items appear here after Claude reads a meeting." : undefined}
+            body={status === "pending" ? "New action items appear here after a meeting is summarized." : undefined}
           />
         )}
       </div>

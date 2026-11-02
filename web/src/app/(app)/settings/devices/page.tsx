@@ -4,22 +4,24 @@ import { db } from "@/lib/db";
 import { Download } from "lucide-react";
 import { fmtAgo } from "@/lib/format";
 import { ApiKeys, DeviceSettings } from "../recorder-settings";
+import { PageHead } from "../ui";
 
-export const metadata: Metadata = { title: "Devices & keys · Settings" };
+export const metadata: Metadata = { title: "Recorder & devices · Settings" };
 
 export default async function DevicesSettings() {
   const d = db();
   const [keys, devs, contexts] = await Promise.all([listApiKeys(d), listDevices(d), listContexts(d)]);
   const url = publicUrl() || "http://<server>:3000";
   return (
-    <>
+    <div className="space-y-6">
+      <PageHead title="Recorder & devices">The Debrief Recorder records your calls on a Mac or PC and uploads them here. Each computer gets its own key, and a label and color for its recordings.</PageHead>
       <RecorderDownload publicUrl={url} />
       <ApiKeys
         publicUrl={url}
         keys={keys.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, created: fmtAgo(k.createdAt), lastUsed: k.lastUsedAt ? fmtAgo(k.lastUsedAt) : null }))}
       />
       <DeviceSettings contexts={contexts} devices={devs.map((x) => ({ ...x, lastActive: x.lastActive ? fmtAgo(x.lastActive) : null }))} />
-    </>
+    </div>
   );
 }
 
@@ -49,7 +51,7 @@ function RecorderDownload({ publicUrl }: { publicUrl: string }) {
           Install it. It isn&apos;t signed yet: on a Mac, drag it to Applications, then right-click it → <b className="font-medium text-foreground">Open</b> the first time. On
           Windows, at the SmartScreen warning choose <b className="font-medium text-foreground">More info → Run anyway</b>.
         </li>
-        <li>Create a key for this computer below.</li>
+        <li>Create a key for this computer under API keys below.</li>
         <li>
           In the recorder&apos;s Settings, enter <code className="font-mono text-foreground">{publicUrl}</code> and the key, then{" "}
           <b className="font-medium text-foreground">Test connection</b> and <b className="font-medium text-foreground">Save</b>.

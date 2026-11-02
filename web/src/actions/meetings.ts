@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { extractWithClaude, linkTranscript, recordings, requestPublish, restoreLocal, slackConfigured, transcripts } from "@debrief/core";
+import { extractWithAi, linkTranscript, recordings, requestPublish, restoreLocal, slackConfigured, transcripts } from "@debrief/core";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -79,7 +79,7 @@ export async function retranscribe(recordingId: string) {
 
 export async function extractTasks(transcriptId: string) {
   return run(async () => {
-    const out = await extractWithClaude(db(), uuid.parse(transcriptId));
+    const out = await extractWithAi(db(), uuid.parse(transcriptId));
     return out.tasks.length ? `Found ${out.tasks.length} action items.` : "No action items in this one.";
   }, `/meetings/${transcriptId}`, "/tasks", "/");
 }

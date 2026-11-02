@@ -25,6 +25,9 @@ ENV NODE_ENV=production
 # compose.nas.yaml can run the services as the NAS share's owner.
 RUN apk add --no-cache tzdata && mkdir -p /data/recordings && chmod 777 /data/recordings
 WORKDIR /app
+# The build's version and commit, shown in Settings and the sidebar (see .github/workflows/images.yml).
+ARG DEBRIEF_VERSION=dev DEBRIEF_COMMIT= DEBRIEF_BUILT=
+ENV DEBRIEF_VERSION=$DEBRIEF_VERSION DEBRIEF_COMMIT=$DEBRIEF_COMMIT DEBRIEF_BUILT=$DEBRIEF_BUILT
 
 FROM runtime AS web
 ENV PORT=3000 HOSTNAME=0.0.0.0 MIGRATIONS_DIR=/app/drizzle

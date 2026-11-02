@@ -29,6 +29,7 @@ from .transcribe import Transcriber
 log = logging.getLogger("debrief")
 stop = threading.Event()
 CHANNELS = ("debrief_recording", "debrief_settings")
+STARTED = datetime.now().astimezone()
 
 
 def probe_duration(path: Path) -> float | None:
@@ -47,6 +48,7 @@ def probe_duration(path: Path) -> float | None:
 
 
 def connect(url: str) -> psycopg.Connection:
+    last = ""
     for attempt in range(1, 61):
         try:
             conn = psycopg.connect(url, autocommit=True)
@@ -55,11 +57,33 @@ def connect(url: str) -> psycopg.Connection:
                 conn.execute(f"LISTEN {ch}")
             return conn
         except psycopg.Error as err:
+            last = str(err).strip()
             if attempt == 1:
                 log.info("Waiting for the database and its schema (the web container migrates it)… %s", str(err).strip())
             if stop.wait(2):
                 raise SystemExit(0)
-    raise SystemExit("The database never became ready.")
+    raise SystemExit(f"The database never became ready: {last}")
+
+
+_last_report = 0.0
+
+
+def report_status(conn: psycopg.Connection, detail: str, every: float = 0) -> None:
+    """Checks in with this image's build, for Settings → Overview. `every` throttles calls from the progress callback."""
+    global _last_report
+    if every and time.monotonic() - _last_report < every:
+        return
+    _last_report = time.monotonic()
+    try:
+        conn.execute(
+            """insert into service_status (service, version, "commit", detail, started_at, seen_at)
+               values ('transcriber', %s, %s, %s, %s, now())
+               on conflict (service) do update set version = excluded.version, "commit" = excluded."commit",
+                 detail = excluded.detail, started_at = excluded.started_at, seen_at = now()""",
+            (os.environ.get("DEBRIEF_VERSION") or "dev", (os.environ.get("DEBRIEF_COMMIT") or "")[:7] or None, detail, STARTED),
+        )
+    except psycopg.Error as err:
+        log.debug("Couldn't report status: %s", err)
 
 
 def load_config(conn: psycopg.Connection) -> Config:
@@ -185,10 +209,12 @@ class Worker:
     def process(self, row) -> None:
         rec_id, rel, storage, started, title = row
         log.info("Transcribing %s…", rel)
+        report_status(self.conn, "transcribing")
         t0 = time.monotonic()
 
         def progress(p: float):
             self.conn.execute("update recordings set progress = %s where id = %s", (round(p, 3), rec_id))
+            report_status(self.conn, "transcribing", every=60)
 
         try:
             path = audio_path(self.cfg, rel, storage)
@@ -251,6 +277,7 @@ def main() -> None:
         try:
             cfg = load_config(conn)
             worker.configure(cfg)
+            report_status(conn, "idle")
             scanner.scan(cfg)
             while not stop.is_set() and (row := worker.claim()):
                 worker.process(row)

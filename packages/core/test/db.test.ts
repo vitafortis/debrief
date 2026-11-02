@@ -18,7 +18,7 @@ before(async () => {
   if (!core) return;
   await runMigrations();
   const db = core.getDb();
-  await db.execute(sql`truncate calendars, recordings, devices, uploads, api_keys, settings cascade`);
+  await db.execute(sql`truncate calendars, recordings, devices, uploads, api_keys, settings, service_status cascade`);
   const [cal] = await db.insert(core.calendars).values({ source: "ics", externalId: "https://x.example/a.ics", name: "Work", context: "acme" }).returning();
   calendarId = cal.id;
   const [rec] = await db
@@ -326,4 +326,32 @@ test("a device's badge is its label and color once set, and steady before that",
   assert.deepEqual((await core!.deviceBadges(db)).laptop, { label: "MacBook", color: "violet" });
   // A device's context isn't touched by setting its badge.
   assert.equal((await core!.listDevices(db)).find((d) => d.name === "laptop")?.context, null);
+});
+
+test("each service's check-in shows whether it's running, quiet too long, or on another build", { skip }, async () => {
+  const db = core!.getDb();
+  await core!.reportStatus(db, "transcriber", "idle");
+  await db.insert(core!.serviceStatus).values({ service: "mcp", version: "0.0.1", seenAt: new Date() });
+  await db.insert(core!.serviceStatus).values({ service: "calendar-sync", version: "dev", seenAt: new Date(Date.now() - 10 * 60_000) });
+  const health = Object.fromEntries((await core!.serviceHealth(db)).map((s) => [s.service, s]));
+  assert.equal(health.web.state, "ok");
+  assert.equal(health.transcriber.state, "ok");
+  assert.equal(health.transcriber.detail, "idle");
+  assert.equal(health.mcp.state, "behind");
+  assert.equal(health["calendar-sync"].state, "down");
+  // A transcriber mid-recording gets longer before it counts as down.
+  await db.update(core!.serviceStatus).set({ detail: "transcribing", seenAt: new Date(Date.now() - 10 * 60_000) }).where(sql`service = 'transcriber'`);
+  assert.equal((await core!.serviceHealth(db)).find((s) => s.service === "transcriber")?.state, "ok");
+});
+
+test("calendars added with the same ID are turned on again rather than doubled", { skip }, async () => {
+  const db = core!.getDb();
+  await db.insert(core!.calendars).values({ source: "google", externalId: "team@example.com", name: "Team", enabled: false });
+  await db
+    .insert(core!.calendars)
+    .values({ source: "google", externalId: "team@example.com", name: "Team", context: "acme" })
+    .onConflictDoUpdate({ target: [core!.calendars.source, core!.calendars.externalId], set: { enabled: true, context: "acme" } });
+  const rows = await db.select().from(core!.calendars).where(sql`external_id = 'team@example.com'`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].enabled, true);
 });

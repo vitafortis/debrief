@@ -58,6 +58,7 @@ jobs:
             base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
             echo "version=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
+          echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -79,5 +80,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DEBRIEF_VERSION=${{ steps.ver.outputs.version }}
+            DEBRIEF_COMMIT=${{ github.sha }}
+            DEBRIEF_BUILT=${{ steps.ver.outputs.built }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

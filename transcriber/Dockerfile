@@ -17,4 +17,7 @@ RUN if [ "$DIARIZE" = "true" ]; then \
 RUN useradd -u 1000 -m app && mkdir -p /models /data/recordings && chmod 777 /models /data/recordings
 USER app
 VOLUME /models
+# The build's version and commit, reported to Settings (see .github/workflows/images.yml).
+ARG DEBRIEF_VERSION=dev DEBRIEF_COMMIT= DEBRIEF_BUILT=
+ENV DEBRIEF_VERSION=$DEBRIEF_VERSION DEBRIEF_COMMIT=$DEBRIEF_COMMIT DEBRIEF_BUILT=$DEBRIEF_BUILT
 CMD ["debrief-transcriber"]
