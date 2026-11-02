@@ -424,7 +424,19 @@ function IcsStep({ url, setUrl, onChecked }: { url: string; setUrl: (v: string) 
   );
 }
 
-function AddCalendar({ g, contexts, initial, onClose }: { g: GoogleState; contexts: string[]; initial: { step: 1 | 2; source: Source }; onClose?: () => void }) {
+function AddCalendar({
+  g,
+  contexts,
+  initial,
+  onClose,
+  onDone,
+}: {
+  g: GoogleState;
+  contexts: string[];
+  initial: { step: 1 | 2; source: Source };
+  onClose?: () => void;
+  onDone: () => void;
+}) {
   const router = useRouter();
   const [pending, go] = useAction();
   const [step, setStep] = useState<1 | 2 | 3>(initial.step);
@@ -532,7 +544,8 @@ function AddCalendar({ g, contexts, initial, onClose }: { g: GoogleState; contex
                 go(
                   () => addCalendars(list.length === 1 ? [{ ...list[0], name: list[0].name || name }] : list, ctx, dest),
                   () => {
-                    onClose?.();
+                    // Close even when this was the first calendar (no Cancel then), so the list and "Add a calendar" show.
+                    onDone();
                     router.replace("/settings/calendars");
                   }
                 )
@@ -601,6 +614,7 @@ export function CalendarSettings({ calendars, contexts, google, flash }: { calen
             contexts={contexts}
             initial={flash.add && (flash.connected || flash.error) ? { step: 2, source: "gme" } : { step: 1, source: "gme" }}
             onClose={calendars.length ? () => setAdding(false) : undefined}
+            onDone={() => setAdding(false)}
           />
         </div>
       )}

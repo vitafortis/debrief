@@ -181,6 +181,18 @@ test.describe("signed in", () => {
     await expect(page.getByText(/events · synced/)).toHaveCount(2);
     await page.goto("/");
     await expect(page.getByRole("button", { name: "lumen" })).toBeVisible();
+    // A good link is added, and the form closes so another can be added.
+    await page.goto("/settings/calendars");
+    await page.getByRole("button", { name: "Add a calendar" }).click();
+    await page.getByRole("radio", { name: /Outlook, iCloud or other/ }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByLabel("ICS link").fill("https://calendar.example.com/team.ics");
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByPlaceholder("Client calendar").fill("Team offsite");
+    await page.getByRole("button", { name: "Add and sync" }).click();
+    await expect(page.getByText("Team offsite")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add and sync" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add a calendar" })).toBeVisible();
   });
 
   test("settings: the sections list shows each one's state, and the old addresses still work", async ({ page }) => {
