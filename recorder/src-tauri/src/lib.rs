@@ -7,13 +7,14 @@ pub mod detect;
 mod icons;
 pub mod settings;
 pub mod store;
+pub mod update;
 pub mod upload;
 
 use settings::{Action, Settings};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -48,6 +49,7 @@ struct State {
     /// Apps answered "Not now" for, until they let go of the microphone.
     snoozed: Mutex<HashSet<String>>,
     tray: Mutex<Option<TrayMenu>>,
+    updates: Mutex<update::Updates>,
 }
 
 struct TrayMenu {
@@ -55,6 +57,7 @@ struct TrayMenu {
     status: MenuItem<tauri::Wry>,
     toggle: MenuItem<tauri::Wry>,
     uploads: MenuItem<tauri::Wry>,
+    update: MenuItem<tauri::Wry>,
 }
 
 type S<'a> = tauri::State<'a, State>;
@@ -293,10 +296,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let uploads = MenuItem::with_id(app, "uploads", "Everything is in Debrief", false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Debrief", true, None::<&str>)?;
     let folder = MenuItem::with_id(app, "folder", "Show recordings folder", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", update_label(&app.state::<State>().updates.lock().unwrap()), true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Debrief Recorder", true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
-    let menu = Menu::with_items(app, &[&status, &toggle, &sep()?, &uploads, &open, &folder, &sep()?, &settings, &quit])?;
+    let menu = Menu::with_items(app, &[&status, &toggle, &sep()?, &uploads, &open, &folder, &sep()?, &update, &settings, &quit])?;
     let icon = TrayIconBuilder::with_id("main")
         .icon(icons::tray(false))
         .tooltip("Debrief Recorder")
@@ -321,6 +325,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = tauri_plugin_opener::open_path(dir, None::<&str>);
             }
+            "update" => {
+                let available = app.state::<State>().updates.lock().unwrap().available.clone();
+                match available {
+                    Some(r) => {
+                        let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
+                    }
+                    None => {
+                        let app = app.clone();
+                        std::thread::spawn(move || check_updates(&app, true));
+                    }
+                }
+            }
             "settings" => open_settings(app),
             "quit" => {
                 stop_recording(app, "quitting");
@@ -329,8 +345,95 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
-    *app.state::<State>().tray.lock().unwrap() = Some(TrayMenu { icon, status, toggle, uploads });
+    *app.state::<State>().tray.lock().unwrap() = Some(TrayMenu { icon, status, toggle, uploads, update });
     Ok(())
+}
+
+// --- Updates -------------------------------------------------------------------
+
+/// The update item's usual text, from the latest check.
+fn update_label(u: &update::Updates) -> String {
+    match (&u.available, u.state) {
+        (_, "checking") => "Checking for updates…".into(),
+        (Some(r), _) => format!("Update to {}…", r.version),
+        _ => "Check for updates…".into(),
+    }
+}
+
+fn set_update_item(app: &AppHandle, text: String) {
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(t) = app2.state::<State>().tray.lock().unwrap().as_ref() {
+            let _ = t.update.set_text(&text);
+        }
+    });
+}
+
+/// Shows `text` on the update item for a few seconds, then its usual text.
+fn flash_update_item(app: &AppHandle, text: String) {
+    set_update_item(app, text);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(4));
+        let label = update_label(&app.state::<State>().updates.lock().unwrap());
+        set_update_item(&app, label);
+    });
+}
+
+/// Asks GitHub for a newer version and keeps the answer for the menu and
+/// Settings. It blocks, so call it off the main thread. From the menu
+/// (`by_hand`) the item briefly says how it went; otherwise it only changes
+/// when there's an update.
+fn check_updates(app: &AppHandle, by_hand: bool) -> update::Updates {
+    let st = app.state::<State>();
+    let mut u = st.updates.lock().unwrap();
+    if u.state == "dev" || u.state == "checking" {
+        let out = u.clone();
+        drop(u);
+        if by_hand && out.state == "dev" {
+            flash_update_item(app, "No update checks in dev builds".into());
+        }
+        return out;
+    }
+    u.state = "checking";
+    let current = u.current.clone();
+    let label = update_label(&u);
+    drop(u);
+    set_update_item(app, label);
+
+    let result = update::check(&current);
+    let mut u = st.updates.lock().unwrap();
+    let flash = match result {
+        Ok(Some(r)) => {
+            if u.available.as_ref() != Some(&r) {
+                log::info!("Debrief Recorder {} is available", r.version);
+            }
+            u.available = Some(r);
+            u.state = "done";
+            u.error = None;
+            None
+        }
+        Ok(None) => {
+            u.available = None;
+            u.state = "done";
+            u.error = None;
+            Some(format!("Up to date ({current})"))
+        }
+        Err(e) => {
+            log::error!("Checking for updates: {e:#}");
+            u.state = "failed";
+            u.error = Some(e.to_string());
+            Some("Couldn't check for updates".to_string())
+        }
+    };
+    let out = u.clone();
+    let label = update_label(&u);
+    drop(u);
+    match flash {
+        Some(text) if by_hand => flash_update_item(app, text),
+        _ => set_update_item(app, label),
+    }
+    out
 }
 
 // --- Commands for the windows --------------------------------------------------
@@ -385,6 +488,7 @@ struct StatusView {
     recordings_dir: String,
     recent: Vec<RecentView>,
     mic_users: Vec<String>,
+    updates: update::Updates,
 }
 
 #[derive(serde::Serialize)]
@@ -439,6 +543,7 @@ fn status(st: S) -> StatusView {
         recordings_dir: root.to_string_lossy().into_owned(),
         recent,
         mic_users: detect::mic_users().into_iter().map(|u| u.name).collect(),
+        updates: st.updates.lock().unwrap().clone(),
     }
 }
 
@@ -499,6 +604,20 @@ fn open_folder(st: S) {
     let _ = tauri_plugin_opener::open_path(dir, None::<&str>);
 }
 
+/// Settings → Check for updates: the same check as the menu's.
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<update::Updates, String> {
+    tauri::async_runtime::spawn_blocking(move || check_updates(&app, false)).await.map_err(|e| e.to_string())
+}
+
+/// Opens the installer for the newer version the last check found.
+#[tauri::command]
+fn download_update(st: S) {
+    if let Some(r) = st.updates.lock().unwrap().available.clone() {
+        let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
+    }
+}
+
 // --- Start-up ------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -536,6 +655,7 @@ pub fn run() {
                 prompt: Mutex::new(None),
                 snoozed: Mutex::new(HashSet::new()),
                 tray: Mutex::new(None),
+                updates: Mutex::new(update::Updates::new(app.package_info().version.to_string())),
             });
             if first_run {
                 let _ = s.save(&settings_path);
@@ -552,6 +672,19 @@ pub fn run() {
             std::thread::spawn(move || loop {
                 std::thread::sleep(Duration::from_secs(5));
                 refresh_tray(&h);
+            });
+            // Look for a newer version a minute after starting, then once a day.
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(60));
+                let mut last: Option<SystemTime> = None;
+                loop {
+                    if last.and_then(|t| t.elapsed().ok()).is_none_or(|d| d >= Duration::from_secs(24 * 3600)) {
+                        check_updates(&h, false);
+                        last = Some(SystemTime::now());
+                    }
+                    std::thread::sleep(Duration::from_secs(30 * 60));
+                }
             });
             Ok(())
         })
@@ -579,7 +712,9 @@ pub fn run() {
             toggle_recording,
             current_prompt,
             answer_prompt,
-            open_folder
+            open_folder,
+            check_for_updates,
+            download_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app")

@@ -397,7 +397,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 |---|---|
 | <img src="docs/screenshots/recorder.png" width="380" alt="The recorder's settings"> | <img src="docs/screenshots/recorder-prompt.png" width="380" alt="Record this meeting?"><br><br>**The popup** when an app with an *Ask* rule takes the microphone.<br><br>**Settings:** the live recording with levels for both sides, what's uploaded, the server and key, the rules per app, and audio and storage options. |
 
-**The menu.** Click the waveform icon in the menu bar (Mac) or tray (Windows). It shows whether it's recording and for how long, and whether everything is uploaded. From the menu you can start or stop a recording by hand, open Debrief, show the recordings folder, open Settings, or quit. While recording, the icon turns red.
+**The menu.** Click the waveform icon in the menu bar (Mac) or tray (Windows). It shows whether it's recording and for how long, and whether everything is uploaded. From the menu you can start or stop a recording by hand, open Debrief, show the recordings folder, open Settings, check for updates, or quit. While recording, the icon turns red.
 
 **When an app takes the microphone,** the recorder follows that app's rule:
 
@@ -419,6 +419,8 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 **Uploading.** Audio goes up about every 20 seconds while recording, so Debrief has nearly all of it when you hang up. The recording is always written to disk first. With no connection (a plane, a hotel, the server down), it keeps recording and uploads later, retrying with backoff; Settings and the menu show what's waiting and why. Uploads resume exactly where they stopped. A recording the app was quit or crashed in the middle of is uploaded as far as it got; one that never finishes uploading (the laptop died) is transcribed anyway after 12 hours (Settings → Storage).
 
 **Copies on the computer.** Recordings stay in the recordings folder (Settings → *On this computer*) for 14 days after they're uploaded, then they're deleted; 0 deletes them as soon as Debrief has them. The server (and its archive) keeps the original.
+
+**Updates.** The recorder looks for a newer release on GitHub a minute after it starts and then once a day. When there is one, the menu shows *Update to 0.1.12…*, which downloads the installer; install it over the old one. Settings shows the version, with **Check for updates**. It isn't signed, so it can't update itself.
 
 **Settings** are stored in `~/Library/Application Support/io.github.vitafortis.debrief.recorder/settings.json` (Mac) or `%APPDATA%\io.github.vitafortis.debrief.recorder\settings.json` (Windows), readable only by you, API key included. Logs are in `~/Library/Logs/io.github.vitafortis.debrief.recorder/` or `%LOCALAPPDATA%\io.github.vitafortis.debrief.recorder\logs\`.
 
