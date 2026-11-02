@@ -232,23 +232,24 @@ test.describe("signed in", () => {
   test("settings: a saved setting sticks, a secret isn't shown back, and .env values are locked", async ({ page }) => {
     await page.goto("/settings/ai");
     await expect(page.getByRole("radio", { name: /Anthropic/ })).toHaveAttribute("aria-checked", "true");
-    await page.getByLabel("Model").fill("claude-e2e-model");
+    await expect(page.getByRole("radio", { name: /Haiku 5.5/ })).toHaveAttribute("aria-checked", "true");
+    await page.getByLabel("Or another model").fill("claude-e2e-model");
     await page.getByLabel("API key").fill("sk-ant-e2e-not-real");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
     await page.reload();
-    await expect(page.getByLabel("Model")).toHaveValue("claude-e2e-model");
+    await expect(page.getByLabel("Or another model")).toHaveValue("claude-e2e-model");
     await expect(page.getByLabel("API key")).toHaveValue("");
     await expect(page.getByLabel("API key")).toHaveAttribute("placeholder", /Saved/);
     expect(await page.content()).not.toContain("sk-ant-e2e-not-real");
     await page.getByRole("button", { name: "Remove" }).click();
-    await page.getByLabel("Model").fill("");
+    await page.getByRole("radio", { name: /Sonnet 5.5/ }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
 
     // Picking another provider shows its own key and model.
     await page.getByRole("radio", { name: /OpenAI/ }).click();
-    await expect(page.getByLabel("Model")).toHaveValue("gpt-5-mini");
+    await expect(page.getByRole("radio", { name: /GPT-5 mini/ })).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Discard" }).click();
 
     // PUBLIC_URL, TZ and OWNER_NAME come from the test server's environment.

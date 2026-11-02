@@ -542,7 +542,7 @@ Settings are made in the app. Each one can also be set in `.env` under the name 
 | Transcription | `WHISPER_MODEL`, `WHISPER_DEVICE`, `COMPUTE_TYPE`, `CPU_THREADS`, `LANGUAGE`, `BEAM_SIZE` | `large-v3`, `cpu`, `int8` on CPU, all cores, detected, `5` |
 | Speaker labels | `HF_TOKEN`, `DIARIZE` | on when there's a token |
 | AI provider | `AI_PROVIDER` (`anthropic`, `openai`, `gemini`, `custom`), `AUTO_EXTRACT` | `anthropic`, `true` |
-| Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | `claude-sonnet-5-5` |
+| Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | `claude-haiku-5-5` |
 | OpenAI | `OPENAI_API_KEY`, `OPENAI_MODEL` | `gpt-5-mini` |
 | Google Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL` | `gemini-2.5-flash` |
 | Your own server | `AI_BASE_URL` (OpenAI-compatible, e.g. `http://ollama:11434/v1`), `AI_API_KEY`, `AI_MODEL` | |

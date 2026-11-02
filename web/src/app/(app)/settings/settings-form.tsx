@@ -191,6 +191,14 @@ function Locked({ f }: { f: Field }) {
 function FieldRow({ f, value, cleared, onChange, onClear }: RowProps) {
   const id = `s-${f.key}`;
   const locked = f.source === "env";
+  // Tiles among other settings (a provider's models): the label above, the tiles across the card.
+  if (f.display === "tiles")
+    return (
+      <div className="space-y-2.5 px-4 py-3">
+        <Label f={{ ...f, help: undefined }} id={id} />
+        <TileField f={f} value={value} onChange={onChange} />
+      </div>
+    );
   if (f.type === "bool" && !locked)
     return (
       <div className="flex items-center gap-4 px-4 py-3">
@@ -319,11 +327,27 @@ function Control({ f, id, value, cleared, onChange, onClear }: { f: Field; id: s
 
 function TileField({ f, value, onChange }: { f: Field; value: string; onChange: (v: string) => void }) {
   const options = f.options ?? [];
-  // A value from .env or an older version that isn't one of the tiles still shows, as its own tile.
-  const all = options.some((o) => o.value === value) ? options : [...options, { value, label: value, detail: "Set by name" }];
+  const known = options.some((o) => o.value === value);
+  // A free-text setting (a model) takes any name in the box under the tiles; a choice from .env or an older version shows as its own tile.
+  const all = known || f.type === "text" ? options : [...options, { value, label: value, detail: "Set by name" }];
   return (
     <div className="space-y-1.5">
       <Tiles label={f.label} value={value} onChange={onChange} disabled={f.source === "env"} options={all.map((o) => ({ value: o.value, title: o.label, detail: o.detail }))} />
+      {f.type === "text" && f.source !== "env" && (
+        <div className="flex items-center gap-2 pt-0.5">
+          <label htmlFor={`s-${f.key}-other`} className="shrink-0 text-[0.6875rem] text-muted-foreground">
+            Or another model
+          </label>
+          <input
+            id={`s-${f.key}-other`}
+            className={`input h-7 min-w-0 flex-1 font-mono text-[0.6875rem] ${known ? "" : "border-primary"}`}
+            placeholder="its exact name"
+            value={known ? "" : value}
+            onChange={(e) => onChange(e.target.value.trim() || (f.default ?? ""))}
+          />
+        </div>
+      )}
+      {f.type === "text" && f.source === "env" && !known && <p className="px-0.5 font-mono text-[0.6875rem] text-muted-foreground">{value}</p>}
       {f.source === "env" && (
         <p className="flex items-center gap-1.5 px-0.5 text-[0.6875rem] text-muted-foreground">
           <Lock className="size-3" /> Set by {f.key} in the environment.

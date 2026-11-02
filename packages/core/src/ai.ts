@@ -38,7 +38,7 @@ export function aiConfigured() {
   return c.provider === "custom" ? !!(c.baseUrl && c.model) : !!(c.key && c.model);
 }
 
-/** "Claude (claude-sonnet-5-5)", for status lines. */
+/** "Claude (claude-haiku-5-5)", for status lines. */
 export const aiLabel = () => `${AI_PROVIDER_NAMES[aiProvider()]} (${aiConfig().model || "no model"})`;
 
 export type ToolSpec = { name: string; description: string; schema: Record<string, unknown> };
@@ -54,10 +54,31 @@ export function plainSchema(schema: unknown): unknown {
   );
 }
 
-/** The request each provider expects, as fetch arguments. Exported for the tests. */
+// Structured outputs take a subset of JSON Schema: no length, count or range limits, and every object closed.
+const UNSUPPORTED = new Set(["$schema", "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "pattern"]);
+
+/** The schema as Claude's structured outputs accept it. The limits it drops are still checked when the reply is parsed. */
+export function structuredSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(structuredSchema);
+  if (!schema || typeof schema !== "object") return schema;
+  const out = Object.fromEntries(
+    Object.entries(schema)
+      .filter(([k]) => !UNSUPPORTED.has(k))
+      .map(([k, v]) => [k, k === "properties" && v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([p, d]) => [p, structuredSchema(d)])) : structuredSchema(v)])
+  );
+  return out.type === "object" ? { ...out, additionalProperties: false } : out;
+}
+
+/**
+ * The request each provider expects, as fetch arguments. Claude is asked for
+ * JSON in the tool's schema (structured outputs): its newer models refuse a
+ * forced tool call. `forceTool` is the older way, for models without
+ * structured outputs. Exported for the tests.
+ */
 export function toolRequest(
   c: ReturnType<typeof aiConfig>,
-  req: { system: string; user: string; tool: ToolSpec; maxTokens: number }
+  req: { system: string; user: string; tool: ToolSpec; maxTokens: number },
+  forceTool = false
 ): { url: string; headers: Record<string, string>; body: Record<string, unknown> } {
   if (c.provider === "anthropic")
     return {
@@ -67,8 +88,12 @@ export function toolRequest(
         model: c.model,
         max_tokens: req.maxTokens,
         system: req.system,
-        tools: [{ name: req.tool.name, description: req.tool.description, input_schema: req.tool.schema }],
-        tool_choice: { type: "tool", name: req.tool.name },
+        ...(forceTool
+          ? {
+              tools: [{ name: req.tool.name, description: req.tool.description, input_schema: req.tool.schema }],
+              tool_choice: { type: "tool", name: req.tool.name },
+            }
+          : { output_config: { format: { type: "json_schema", schema: structuredSchema(req.tool.schema) } } }),
         messages: [{ role: "user", content: req.user }],
       },
     };
@@ -94,19 +119,27 @@ export function toolRequest(
   };
 }
 
-type AnthropicReply = { content?: { type: string; name?: string; input?: unknown }[]; error?: { message?: string } };
+type AnthropicReply = { content?: { type: string; name?: string; input?: unknown; text?: string }[]; stop_reason?: string; error?: { message?: string } };
 type OpenAiReply = {
   choices?: { message?: { content?: string | null; tool_calls?: { function?: { name?: string; arguments?: string } }[] } }[];
   error?: { message?: string } | string;
 };
 
-/** What the model passed to the tool, from either kind of reply. Exported for the tests. */
+/** What the model passed to the tool, or the JSON it wrote in the tool's shape, from either kind of reply. Exported for the tests. */
 export function toolInput(provider: AiProvider, body: unknown, tool: string): unknown {
-  if (provider === "anthropic") return (body as AnthropicReply)?.content?.find((c) => c.type === "tool_use" && c.name === tool)?.input;
-  const msg = (body as OpenAiReply)?.choices?.[0]?.message;
-  const call = msg?.tool_calls?.find((t) => !t.function?.name || t.function.name === tool) ?? msg?.tool_calls?.[0];
-  // A local model that can't call tools may still answer with the JSON itself.
-  const raw = call?.function?.arguments ?? msg?.content?.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "");
+  let raw: string | undefined;
+  if (provider === "anthropic") {
+    const content = (body as AnthropicReply)?.content ?? [];
+    const call = content.find((c) => c.type === "tool_use" && c.name === tool);
+    if (call) return call.input;
+    raw = content.find((c) => c.type === "text")?.text;
+  } else {
+    const msg = (body as OpenAiReply)?.choices?.[0]?.message;
+    const call = msg?.tool_calls?.find((t) => !t.function?.name || t.function.name === tool) ?? msg?.tool_calls?.[0];
+    // A local model that can't call tools may still answer with the JSON itself.
+    raw = call?.function?.arguments ?? msg?.content ?? undefined;
+  }
+  raw = raw?.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "");
   if (!raw) return undefined;
   try {
     return JSON.parse(raw);
@@ -125,17 +158,25 @@ export async function callTool(req: { system: string; user: string; tool: ToolSp
   const c = aiConfig();
   const name = c.provider === "custom" ? "Your server" : AI_PROVIDER_NAMES[c.provider];
   if (!aiConfigured()) throw new Error(`Set up an AI provider in Settings → AI summaries first, or ask your assistant through the MCP server.`);
-  const r = toolRequest(c, { ...req, maxTokens: req.maxTokens ?? 8000 });
-  let res: Response;
-  try {
-    res = await fetch(r.url, { method: "POST", headers: r.headers, body: JSON.stringify(r.body), signal: AbortSignal.timeout(req.timeoutMs ?? 180_000) });
-  } catch (err) {
-    throw new Error(`${name}: couldn't reach ${new URL(r.url).host} (${(err as Error).message}).`);
-  }
-  const body = await res.json().catch(() => null);
+  const send = async (forceTool: boolean) => {
+    const r = toolRequest(c, { ...req, maxTokens: req.maxTokens ?? 16000 }, forceTool);
+    let res: Response;
+    try {
+      res = await fetch(r.url, { method: "POST", headers: r.headers, body: JSON.stringify(r.body), signal: AbortSignal.timeout(req.timeoutMs ?? 180_000) });
+    } catch (err) {
+      throw new Error(`${name}: couldn't reach ${new URL(r.url).host} (${(err as Error).message}).`);
+    }
+    return { res, body: await res.json().catch(() => null) };
+  };
+  let { res, body } = await send(false);
+  // An older Claude model without structured outputs: ask for the tool call the old way.
+  if (c.provider === "anthropic" && res.status === 400 && /output_config|output_format|structured output|json_schema/i.test(errorText(body, 400))) ({ res, body } = await send(true));
   if (!res.ok) throw new Error(`${name}: ${errorText(body, res.status)}`);
+  const stop = (body as AnthropicReply | null)?.stop_reason;
+  if (stop === "refusal") throw new Error(`${name} declined to summarize this meeting.`);
   const input = toolInput(c.provider, body, req.tool.name);
-  if (input === undefined) throw new Error(`${name} answered without the notes. Try another model: ${c.model} may not support tool calls.`);
+  if (input === undefined)
+    throw new Error(stop === "max_tokens" ? `${name} ran out of room before finishing. Try again, or a different model.` : `${name} answered without the notes. Try another model: ${c.model} may not support tool calls.`);
   return input;
 }
 
@@ -144,9 +185,9 @@ export async function testAi() {
   const started = Date.now();
   const out = await callTool({
     system: "You are checking that a connection works.",
-    user: 'Call the tool with ok set to true.',
+    user: "Answer with ok set to true.",
     tool: { name: "report", description: "Report that the connection works.", schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] } },
-    maxTokens: 200,
+    maxTokens: 2000,
     timeoutMs: 60_000,
   });
   if (!(out as { ok?: unknown })?.ok) throw new Error(`${AI_PROVIDER_NAMES[aiProvider()]} answered, but not as expected.`);
