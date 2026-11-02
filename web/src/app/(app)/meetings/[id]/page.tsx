@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, gte, lte } from "drizzle-orm";
 import { ArrowLeft, Download, Video } from "lucide-react";
-import { calendarEvents, extractionAvailable, getMeeting, integrationStatus, listContexts, slackConfigured } from "@debrief/core";
+import { calendarEvents, extractionAvailable, getMeeting, integrationStatus, listContexts, markViewed, slackConfigured } from "@debrief/core";
 import { db } from "@/lib/db";
 import { fmtDateTime, fmtDay, fmtDuration, fmtTime } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
@@ -26,6 +26,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   const sp = await searchParams;
   const m = await load(id);
   if (!m) notFound();
+  if (!m.transcript.viewedAt) await markViewed(db(), m.transcript.id);
 
   const at = m.recording.recordedAt;
   const [candidates, contexts] = await Promise.all([

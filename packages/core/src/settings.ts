@@ -34,6 +34,8 @@ export const SETTINGS: SettingDef[] = [
   { key: "OWNER_NAME", group: "general", label: "Your name", type: "text", placeholder: "Alex", help: "Shown in the sidebar, and used when you sign in with the password." },
   { key: "OWNER_EMAIL", group: "general", label: "Your email", type: "text", placeholder: "you@example.com" },
   { key: "TZ", group: "general", label: "Time zone", type: "text", default: "UTC", placeholder: "America/New_York", help: "Meetings are shown in it, and file names without a zone are read in it." },
+  { key: "WORK_DAY_START", group: "general", label: "Working hours start", type: "number", default: "8", help: "The hour (0–23) the home calendar opens on. Earlier meetings are a scroll away." },
+  { key: "WORK_DAY_END", group: "general", label: "Working hours end", type: "number", default: "18", help: "The hour (1–24) the home calendar shows up to." },
   { key: "PUBLIC_URL", group: "general", label: "Address", type: "text", placeholder: "https://debrief.example.com", help: "Where you open Debrief. Used for links in Slack, tasks and notes." },
 
   // Sign-in (the password itself is set with its own form)

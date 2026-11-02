@@ -141,7 +141,7 @@ Everything from here on is in Settings:
 | **Transcription** | The Whisper model, CPU or GPU, language, and speaker labels. |
 | **Claude** | The Anthropic API key for automatic summaries, and the MCP server. |
 | **Slack & tasks** | The Slack webhook, Akiflow and Linear. |
-| **Devices & keys** | API keys for each recorder and Claude client, and each device's context. |
+| **Devices & keys** | API keys for each recorder and Claude client, and each device's context, label and badge color. |
 
 A setting can also go in `.env` under the same name (for example `ANTHROPIC_API_KEY=…`). That value wins, and Settings shows it with a lock.
 
@@ -301,16 +301,17 @@ Archived recordings land in `audio/<device>/<start>_<id>/audio.opus`, beside a `
 ### Day to day
 
 1. **Take the call.** The recorder asks (or just starts, by your rules) when the meeting app takes the microphone, and stops when the app lets go. Nothing joins the call.
-2. **Read the summary in Slack**, or open the dashboard. It shows:
-   - today's meetings and whether each was recorded;
-   - what's still transcribing, with progress;
-   - the action items waiting for your review.
+2. **Read the summary in Slack**, or open the home page. From the top:
+   - **Finish setting up**, while something is missing: the recorder, a calendar, a Claude API key, and the optional speaker labels and Slack, Akiflow or Linear, each with what it unlocks. It goes once the required ones are done.
+   - **Transcriptions**: what's queued or transcribing, and what's ready that you haven't opened yet.
+   - **The calendar**, by day or week. It opens on your working hours (Settings → General) and scrolls for the rest; a marker shows how many meetings are earlier or later. Beside it, the month marks recorded days, upcoming meetings and days with something to clean up: tap a day to go there. **Coming up** lists your next meetings, with a link to join.
+   - **Needs cleanup**: every recent transcript that's untitled, has no calendar event, unnamed speakers, no summary or tasks yet, tasks to review, or is empty, with a button for the fix.
 3. **Get the action items.** With an Anthropic API key (Settings → Claude) they're already there. Otherwise ask Claude *"Extract the action items from today's standup in Debrief"* (see [Connecting Claude](#connecting-claude)).
 4. **Review and send them** on the Tasks page (below).
 
 ### The sidebar and calendar filter
 
-Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the dashboard, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
+Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the home page, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
 
 ### A meeting
 
@@ -379,7 +380,7 @@ Use the arrows and **Today** to move around, and click a day's header for the da
 See [step 4](#4-set-it-up-in-the-browser) for what each tab holds. A few details:
 
 - **Calendars:** switching one off hides its events; renaming a context renames it everywhere; *Tasks go to* sets the default destination; **Sync now** syncs straight away (it also syncs every 5 minutes).
-- **Devices & keys:** every computer recordings have come from (the recorder's name, or the Syncthing folder). Nothing is tagged by device until you pick a context for one. A device's context is only used for meetings without a calendar event; the event's calendar always wins. API keys are shown once; Debrief keeps only a hash, and revoking one signs that recorder or Claude client out at once.
+- **Devices & keys:** every computer recordings have come from (the recorder's name, or the Syncthing folder). Nothing is tagged by device until you pick a context for one. Give each a short label and a color: it shows as a badge wherever its recordings appear, and a recording with no calendar event or name shows as *Untitled* with that badge rather than a long date. A device's context is only used for meetings without a calendar event; the event's calendar always wins. API keys are shown once; Debrief keeps only a hash, and revoking one signs that recorder or Claude client out at once.
 - **Secrets** (API keys, tokens, webhooks) are never shown again once saved. Type a new one to replace it, or **Remove** it.
 
 ## The recorder
@@ -516,6 +517,7 @@ Settings are made in the app. Each one can also be set in `.env` under the name 
 |---|---|---|
 | Your name, email | `OWNER_NAME`, `OWNER_EMAIL` | |
 | Time zone | `TZ` | `UTC` |
+| Working hours, for the home calendar | `WORK_DAY_START`, `WORK_DAY_END` | `8`, `18` |
 | Address | `PUBLIC_URL` | |
 | Single sign-on | `AUTH_OIDC_ISSUER`, `AUTH_OIDC_ID`, `AUTH_OIDC_SECRET`, `AUTH_OIDC_NAME`, `ALLOWED_EMAILS` | |
 | Google credentials | `GOOGLE_CREDENTIALS` (the JSON), or `GOOGLE_CREDENTIALS_FILE` (a path) | |

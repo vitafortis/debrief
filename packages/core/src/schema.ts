@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { DeviceColor } from "./device-colors";
 import {
   bigint,
   boolean,
@@ -136,6 +137,8 @@ export const transcripts = pgTable(
     language: text("language").default("en"),
     modelVersion: text("model_version"),
     processedAt: ts("processed_at").notNull().defaultNow(),
+    // When it was first opened, so the home page can show what is ready but not yet seen.
+    viewedAt: ts("viewed_at"),
     tasksExtractedAt: ts("tasks_extracted_at"),
     notifiedAt: ts("notified_at"), // when the summary went to Slack
     searchVector: tsvector("search_vector").generatedAlwaysAs(
@@ -199,10 +202,15 @@ export const tasks = pgTable(
  * device name. It tags nothing until a context is set here; a meeting's
  * calendar event, when it has one, still wins.
  */
+export { DEVICE_COLORS, type DeviceColor } from "./device-colors";
+
 export const devices = pgTable("devices", {
   name: text("name").primaryKey(), // the folder under the recordings root
   context: text("context"),
   defaultDestination: text("default_destination").$type<TaskDestination>(),
+  // How its badge reads and looks wherever its recordings show (defaults: the name, and a color picked from it).
+  label: text("label"),
+  color: text("color").$type<DeviceColor>(),
   lastSeenAt: ts("last_seen_at"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });

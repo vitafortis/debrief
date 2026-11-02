@@ -4,10 +4,10 @@
  *
  *   DATABASE_URL=… tsx scripts/seed-demo.ts
  */
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../src/db";
 import { runMigrations } from "../src/migrate";
-import { calendarEvents, calendars, eventAttendees, recordings, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
+import { calendarEvents, calendars, devices, eventAttendees, recordings, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
 import { correlateTranscript } from "../src/correlate";
 import { saveSettings } from "../src/settings";
 
@@ -230,7 +230,7 @@ await meeting({
 });
 
 // A call recorded with nothing on the calendar.
-await meeting({
+const adhoc = await meeting({
   file: "mac-work/recording_adhoc/audio.mp4",
   start: at(-1, 16, 40),
   mins: 9,
@@ -240,6 +240,19 @@ await meeting({
   lines: [
     ["SPEAKER_00", "Hey, quick one, do you have the staging credentials for the load test?"],
     ["SPEAKER_01", "They're in the vault under platform staging. I'll rotate them after."],
+  ],
+});
+
+// One with no event and no name either: the home page shows it as "Untitled" with its device.
+const untitled = await meeting({
+  file: "win-desktop/recording_evening/audio.opus",
+  start: at(-2, 18, 10),
+  mins: 6,
+  device: "win-desktop",
+  names: {},
+  lines: [
+    ["YOU", "Can you hear me? I think the headset was muted the whole first minute."],
+    ["OTHERS", "Loud and clear now. Shall we pick up from the invoice export question?"],
   ],
 });
 
@@ -270,6 +283,14 @@ await db.insert(tasks).values([
   { transcriptId: roadmap!.id, itemNumber: n++, description: "Draft the new pricing page", assignee: "Jules Moreau", dueDate: day(3), priority: "medium", destination: "akiflow", context: "lumen", sourceStart: 45 },
   { transcriptId: roadmap!.id, itemNumber: n++, description: "Prepare the beta group demo", assignee: "Alex", dueDate: day(3), priority: "medium", destination: "akiflow", context: "lumen", sourceStart: 58 },
 ]);
+
+// Badges for the two computers, and what's been opened: everything but the newest two.
+await db.insert(devices).values([
+  { name: "mac-work", label: "Work Mac", color: "pink", context: "acme" },
+  { name: "win-desktop", label: "Desktop", color: "green" },
+]);
+await db.update(transcripts).set({ viewedAt: new Date() });
+await db.update(transcripts).set({ viewedAt: null }).where(inArray(transcripts.id, [standup!.id, adhoc!.id, untitled!.id]));
 
 const linked = await db.select({ n: sql<number>`count(*)::int` }).from(transcriptEvents);
 console.log(`Demo data ready: ${linked[0].n} transcripts linked to events.`);

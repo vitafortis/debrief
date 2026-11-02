@@ -290,3 +290,40 @@ test("the Slack message carries the summary and each action item's details", { s
   assert.match(text, /https:\/\/debrief\.example\/meetings\//);
   assert.ok(core!.meetingMarkdown(m).includes("## Action items"));
 });
+
+test("the cleanup list says what each transcript still needs, and opening one marks it seen", { skip }, async () => {
+  const db = core!.getDb();
+  const add = async (file: string, content: string, segs: { speaker: string }[], durationSecs = 600) => {
+    const [rec] = await db.insert(core!.recordings).values({ filePath: file, device: "laptop", recordedAt: new Date("2026-10-30T15:00:00Z"), durationSecs, status: "done" }).returning();
+    const [t] = await db
+      .insert(core!.transcripts)
+      .values({ recordingId: rec.id, content, speakerSegments: segs.map((s, i) => ({ ...s, start: i, end: i + 1, text: "Hi." })) })
+      .returning();
+    return t.id;
+  };
+  const untitled = await add("laptop/u/audio.opus", "Hello there.", [{ speaker: "YOU" }, { speaker: "OTHERS" }]);
+  const diarized = await add("laptop/d/audio.opus", "Hello there.", [{ speaker: "YOU" }, { speaker: "SPEAKER_00" }]);
+  const empty = await add("laptop/e/audio.opus", "", [], 0);
+
+  const issues = Object.fromEntries((await core!.listCleanup(db)).map((c) => [c.id, c.issues]));
+  // The recorder's two sides read fine as they are; only diarized labels with no name count.
+  assert.deepEqual(issues[untitled], ["untitled", "no-event", "no-summary"]);
+  assert.deepEqual(issues[diarized], ["untitled", "no-event", "speakers", "no-summary"]);
+  assert.deepEqual(issues[empty], ["empty"]);
+
+  const unseen = await core!.listUnviewed(db);
+  assert.ok(unseen.items.some((m) => m.id === untitled));
+  await core!.markViewed(db, untitled);
+  assert.ok(!(await core!.listUnviewed(db)).items.some((m) => m.id === untitled));
+});
+
+test("a device's badge is its label and color once set, and steady before that", { skip }, async () => {
+  const db = core!.getDb();
+  const before = (await core!.deviceBadges(db)).laptop;
+  assert.equal(before.label, "laptop");
+  assert.deepEqual(core!.deviceBadge("laptop"), before);
+  await core!.setDeviceRule(db, "laptop", { label: "MacBook", color: "violet" });
+  assert.deepEqual((await core!.deviceBadges(db)).laptop, { label: "MacBook", color: "violet" });
+  // A device's context isn't touched by setting its badge.
+  assert.equal((await core!.listDevices(db)).find((d) => d.name === "laptop")?.context, null);
+});
