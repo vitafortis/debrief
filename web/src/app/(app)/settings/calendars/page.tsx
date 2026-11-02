@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { calendarEvents, calendars, listContexts, setting } from "@debrief/core";
-import { googleCredentialInfo, googleOAuthReady, listGoogleCalendars, syncWindow } from "@debrief/core/calendar-sync";
+import { googleCredentialInfo, googleIdFromIcs, googleOAuthReady, listGoogleCalendars, syncWindow } from "@debrief/core/calendar-sync";
 import { settingSource } from "@debrief/core/settings";
 import { db } from "@/lib/db";
 import { fmtAgo } from "@/lib/format";
@@ -36,8 +36,13 @@ export default async function CalendarsSettings({ searchParams }: { searchParams
   let listError: string | null = null;
   if (cred.kind === "account") {
     try {
-      const added = new Set(cals.filter((c) => c.source === "google" && c.enabled).map((c) => c.externalId));
-      found = (await listGoogleCalendars()).map((c) => ({ ...c, added: added.has(c.id) }));
+      // Already here: added through Google, or as its ICS link (which would otherwise be added a second time).
+      const added = new Map<string, "google" | "ics">();
+      for (const c of cals.filter((c) => c.enabled)) {
+        const id = c.source === "google" ? c.externalId : googleIdFromIcs(c.externalId);
+        if (id && !added.has(id)) added.set(id, c.source === "google" ? "google" : "ics");
+      }
+      found = (await listGoogleCalendars()).map((c) => ({ ...c, added: added.get(c.id) ?? null }));
     } catch (err) {
       listError = `Couldn't list your calendars: ${(err as Error).message}`;
     }

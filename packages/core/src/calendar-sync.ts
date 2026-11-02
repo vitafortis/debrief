@@ -218,6 +218,17 @@ export async function checkCalendar(source: "google" | "ics", externalId: string
   }
 }
 
+/** The Google calendar an ICS link is for (calendar.google.com/calendar/ical/<id>/…), so it isn't added twice. */
+export function googleIdFromIcs(url: string): string | null {
+  const m = url.match(/^(?:https?|webcal):\/\/(?:calendar|www)\.google\.com\/calendar\/ical\/([^/]+)\//i);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}
+
 /** Google's and the feed server's errors, as what to do about them. */
 export function explainCalendarError(source: string, message: string) {
   const info = /not ?found|404/i.test(message) ? "notfound" : /403|forbidden|insufficient/i.test(message) ? "denied" : /invalid_grant|401/i.test(message) ? "expired" : null;

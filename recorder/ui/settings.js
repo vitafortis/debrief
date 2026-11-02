@@ -135,9 +135,10 @@ async function poll() {
   $("m-sys").style.width = `${Math.min(100, Math.sqrt(s.system_level / 1000) * 100)}%`;
 
   const u = s.upload;
-  $("up-dot").className = `dot ${u.online === true ? "on" : u.online === false ? "bad" : ""}`;
-  $("up-text").textContent =
-    u.online === false
+  $("up-dot").className = `dot ${!u.configured || u.online === false ? "bad" : u.online === true ? "on" : ""}`;
+  $("up-text").textContent = !u.configured
+    ? `Not connected, so nothing uploads${u.waiting ? ` (${u.waiting} waiting)` : ""}. Add the server and an API key below.`
+    : u.online === false
       ? `Can't reach Debrief${u.waiting ? ` · ${u.waiting} waiting` : ""}: ${u.last_error ?? ""}`
       : u.online === true
         ? u.waiting

@@ -129,6 +129,16 @@ fn stop_recording(app: &AppHandle, why: &str) {
     }
     local.ended_at = Some(chrono::Utc::now());
     let _ = local.save(&root);
+    if !st.uploader.status.lock().unwrap().configured {
+        show_prompt(
+            app,
+            Prompt {
+                kind: "error",
+                app: String::new(),
+                message: "Recorded, but this computer isn't connected to Debrief yet, so it can't upload. Open Settings and add your server and an API key (Debrief → Settings → Devices & keys). It uploads as soon as you save.".into(),
+            },
+        );
+    }
     *st.current_id.lock().unwrap() = None;
     log::info!("Stopped {} after {} ({why})", local.id, fmt_elapsed(a.started.elapsed()));
     st.uploader.nudge();
@@ -248,12 +258,15 @@ fn refresh_tray(app: &AppHandle) {
         None => (false, "Not recording".to_string()),
     };
     let u = st.uploader.status.lock().unwrap().clone();
-    let uploads = match (u.online, u.waiting) {
-        (Some(false), n) => format!("Can't reach Debrief{}", if n > 0 { format!(" · {n} waiting") } else { String::new() }),
-        (_, 0) => "Everything is in Debrief".into(),
-        (_, 1) => "Uploading 1 recording…".into(),
-        (_, n) => format!("Uploading {n} recordings…"),
+    let waiting = |n: usize| if n > 0 { format!(" · {n} waiting") } else { String::new() };
+    let uploads = match (u.configured, u.online, u.waiting) {
+        (false, _, n) => format!("Not connected: add an API key in Settings{}", waiting(n)),
+        (_, Some(false), n) => format!("Can't reach Debrief{}", waiting(n)),
+        (_, _, 0) => "Everything is in Debrief".into(),
+        (_, _, 1) => "Uploading 1 recording…".into(),
+        (_, _, n) => format!("Uploading {n} recordings…"),
     };
+    let warn = !u.configured || u.online == Some(false);
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let st = app2.state::<State>();
@@ -262,7 +275,7 @@ fn refresh_tray(app: &AppHandle) {
             let _ = t.status.set_text(&label);
             let _ = t.toggle.set_text(if recording { "Stop recording" } else { "Start recording" });
             let _ = t.uploads.set_text(&uploads);
-            let _ = t.icon.set_icon(Some(icons::tray(recording)));
+            let _ = t.icon.set_icon(Some(icons::tray(recording, warn)));
             let _ = t.icon.set_tooltip(Some(&label));
         }
         drop(tray);
@@ -302,7 +315,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let sep = || PredefinedMenuItem::separator(app);
     let menu = Menu::with_items(app, &[&status, &toggle, &sep()?, &uploads, &open, &folder, &sep()?, &update, &settings, &quit])?;
     let icon = TrayIconBuilder::with_id("main")
-        .icon(icons::tray(false))
+        .icon(icons::tray(false, false))
         .tooltip("Debrief Recorder")
         .menu(&menu)
         .show_menu_on_left_click(true)

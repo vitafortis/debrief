@@ -30,7 +30,7 @@ export type GoogleState = {
   email: string | null;
   locked: boolean;
   redirectUri: string;
-  found: { id: string; name: string; primary: boolean; added: boolean }[] | null;
+  found: { id: string; name: string; primary: boolean; added: "google" | "ics" | null }[] | null;
   listError: string | null;
 };
 
@@ -181,8 +181,8 @@ function GoogleAccountStep({ g, picked, setPicked }: { g: GoogleState; picked: S
               <input
                 type="checkbox"
                 className="checkbox"
-                disabled={c.added}
-                checked={c.added || picked.has(c.id)}
+                disabled={!!c.added}
+                checked={!!c.added || picked.has(c.id)}
                 onChange={(e) => {
                   const s = new Set(picked);
                   if (e.target.checked) s.add(c.id);
@@ -191,7 +191,7 @@ function GoogleAccountStep({ g, picked, setPicked }: { g: GoogleState; picked: S
                 }}
               />
               <span className="min-w-0 flex-1 truncate">{c.name}</span>
-              <span className="text-[0.6875rem] text-muted-foreground">{c.added ? "already syncing" : c.primary ? "your main calendar" : ""}</span>
+              <span className="text-[0.6875rem] text-muted-foreground">{c.added === "ics" ? "already syncing by its ICS link" : c.added ? "already syncing" : c.primary ? "your main calendar" : ""}</span>
             </label>
           ))}
         </div>
@@ -428,12 +428,14 @@ function AddCalendar({
   g,
   contexts,
   initial,
+  first,
   onClose,
   onDone,
 }: {
   g: GoogleState;
   contexts: string[];
   initial: { step: 1 | 2; source: Source };
+  first: boolean;
   onClose?: () => void;
   onDone: () => void;
 }) {
@@ -441,7 +443,8 @@ function AddCalendar({
   const [pending, go] = useAction();
   const [step, setStep] = useState<1 | 2 | 3>(initial.step);
   const [source, setSource] = useState<Source>(initial.source);
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(g.found?.filter((c) => c.primary && !c.added).map((c) => c.id) ?? []));
+  // Tick your main calendar only for a first calendar: after that, you pick what to add.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(first ? (g.found?.filter((c) => c.primary && !c.added).map((c) => c.id) ?? []) : []));
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [ctx, setCtx] = useState(contexts[0] ?? "work");
@@ -614,6 +617,7 @@ export function CalendarSettings({ calendars, contexts, google, flash }: { calen
             contexts={contexts}
             initial={flash.add && (flash.connected || flash.error) ? { step: 2, source: "gme" } : { step: 1, source: "gme" }}
             onClose={calendars.length ? () => setAdding(false) : undefined}
+            first={calendars.length === 0}
             onDone={() => setAdding(false)}
           />
         </div>
