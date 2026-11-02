@@ -37,11 +37,18 @@ test("the recorder API needs an API key, not a session", async ({ request }) => 
 test.describe("signed in", () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
-  test("dashboard shows today's meetings, the queue and tasks to review", async ({ page }) => {
+  test("home shows setup, the queue, the calendar and what needs cleanup", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
-    await expect(page.getByText("Platform standup").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Finish setting up Debrief" })).toBeVisible();
     await expect(page.locator(".badge", { hasText: "62%" })).toContainText("Transcribing");
-    await expect(page.getByText("Send Sarah the API v2 timeline")).toBeVisible();
+    const calendar = page.getByRole("region", { name: "Calendar" });
+    await expect(calendar.getByText("Platform standup").first()).toBeVisible();
+    await calendar.getByRole("link", { name: "Day", exact: true }).click();
+    await expect(page).toHaveURL(/view=day/);
+    const cleanup = page.getByRole("region", { name: "Needs cleanup" });
+    await expect(cleanup.getByText("Untitled")).toBeVisible();
+    await expect(cleanup.locator(".badge-device", { hasText: "Desktop" }).first()).toBeVisible();
+    await expect(cleanup.getByText("4 tasks to review")).toBeVisible();
   });
 
   test("a meeting: event, transcript with names, find, rename a speaker", async ({ page }) => {
@@ -55,6 +62,25 @@ test.describe("signed in", () => {
     await page.getByLabel("Name for Speaker 3").fill("Nate");
     await page.getByRole("button", { name: "Save names" }).click();
     await expect(page.getByText("Nate").first()).toBeVisible();
+  });
+
+  test("meetings can be found by words, attendee, device and date", async ({ page }) => {
+    await page.goto("/meetings");
+    await page.getByPlaceholder("Title or words said").fill("Okta");
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page).toHaveURL(/q=Okta/);
+    await expect(page.getByRole("link", { name: /Northwind onboarding call/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Platform standup/ })).toHaveCount(0);
+    await expect(page.locator("mark", { hasText: "Okta" }).first()).toBeVisible();
+
+    await page.goto("/meetings?attendee=Jules");
+    await expect(page.getByRole("link", { name: /lumen roadmap/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Northwind onboarding call/ })).toHaveCount(0);
+
+    await page.goto("/meetings?device=win-desktop&q=timeline");
+    await expect(page.getByText("No meetings match")).toBeVisible();
+    await page.getByRole("link", { name: "Clear the search" }).click();
+    await expect(page.getByRole("link", { name: /Platform standup/ })).toBeVisible();
   });
 
   test("a meeting can be linked to another event by hand and back", async ({ page }) => {

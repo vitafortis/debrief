@@ -9,10 +9,13 @@ import {
   tasks,
   transcriptEvents,
   transcripts,
+  DEVICE_COLORS,
+  type DeviceColor,
   type RecordingStatus,
   type TaskDestination,
 } from "./schema";
 import { overlapScore, matchThreshold } from "./correlate";
+import { HL_END, HL_START } from "./search";
 
 /** What a meeting is called: a title set by hand, its calendar event's, the recorder's, or the date. */
 export function meetingTitle(m: { title?: string | null; eventTitle?: string | null; titleHint?: string | null; recordedAt: Date }) {
@@ -45,9 +48,17 @@ export type MeetingFilter = {
   context?: string | null;
   from?: Date;
   to?: Date;
+  /** Words in the title, summary or transcript (web-search syntax), or part of the title. */
+  q?: string | null;
+  /** The device it was recorded on. */
+  device?: string | null;
+  /** Part of an attendee's name or email. */
+  attendee?: string | null;
   limit?: number;
   offset?: number;
 };
+
+const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 export async function listMeetings(db: Db, f: MeetingFilter = {}) {
   const pe = primaryEvent(db);
@@ -56,6 +67,20 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
   if (f.to) where.push(lt(recordings.recordedAt, f.to));
   if (f.context === "unmatched") where.push(sql`${pe.eventId} is null`);
   else if (f.context) where.push(sql`${meetingContext} = ${f.context}`);
+  const q = f.q?.trim();
+  const query = sql`websearch_to_tsquery('english', ${q ?? ""})`;
+  if (q) {
+    where.push(
+      sql`(${transcripts.searchVector} @@ ${query} or coalesce(${transcripts.title}, ${calendarEvents.title}, ${recordings.titleHint}, '') ilike ${like(q)})`
+    );
+  }
+  if (f.device) where.push(eq(recordings.device, f.device));
+  const attendee = f.attendee?.trim();
+  if (attendee) {
+    where.push(sql`exists (
+      select 1 from ${transcriptEvents} te join ${eventAttendees} a on a.event_id = te.event_id
+      where te.transcript_id = ${transcripts.id} and (a.name ilike ${like(attendee)} or a.email ilike ${like(attendee)}))`);
+  }
 
   const rows = await db
     .select({
@@ -74,6 +99,11 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
       calendarName: calendars.name,
       openTasks: sql<number>`(select count(*)::int from ${tasks} where ${tasks.transcriptId} = ${transcripts.id} and ${tasks.status} in ('pending','approved'))`,
       attendeeCount: sql<number>`(select count(*)::int from ${eventAttendees} where ${eventAttendees.eventId} = ${calendarEvents.id})`,
+      // Where the words were said, matched words between HL_START and HL_END.
+      excerpt: q
+        ? sql<string | null>`case when ${transcripts.searchVector} @@ ${query} then ts_headline('english', ${transcripts.content}, ${query},
+            ${`StartSel=${HL_START}, StopSel=${HL_END}, MaxWords=30, MinWords=10, ShortWord=2, MaxFragments=1`}) end`
+        : sql<string | null>`null`,
     })
     .from(transcripts)
     .innerJoin(recordings, eq(recordings.id, transcripts.recordingId))
@@ -85,8 +115,12 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
     .orderBy(desc(recordings.recordedAt))
     .limit(f.limit ?? 50)
     .offset(f.offset ?? 0);
-  return rows.map((r) => ({ ...r, displayTitle: meetingTitle(r) }));
+  return rows.map((r) => ({ ...r, displayTitle: meetingTitle(r), untitled: isUntitled(r) }));
 }
+
+/** No title set by hand, no calendar event and nothing from the recorder: the UI shows "Untitled" and the device instead of the date. */
+export const isUntitled = (m: { title?: string | null; eventTitle?: string | null; titleHint?: string | null }) =>
+  !m.title?.trim() && !m.eventTitle && !m.titleHint?.trim();
 
 export type MeetingSummary = Awaited<ReturnType<typeof listMeetings>>[number];
 
@@ -216,12 +250,21 @@ export async function listContexts(db: Db) {
 
 /** Every device recordings came from, with its rule (none until set in Settings). */
 export async function listDevices(db: Db) {
-  const rows = await db.execute<{ name: string; context: string | null; default_destination: TaskDestination | null; recordings: number; last_recording: string | null; last_seen_at: string | null }>(sql`
+  const rows = await db.execute<{
+    name: string;
+    context: string | null;
+    default_destination: TaskDestination | null;
+    label: string | null;
+    color: DeviceColor | null;
+    recordings: number;
+    last_recording: string | null;
+    last_seen_at: string | null;
+  }>(sql`
     with seen as (
       select device as name, count(*)::int as recordings, max(recorded_at) as last_recording
       from ${recordings} where device is not null group by device
     )
-    select coalesce(d.name, s.name) as name, d.context, d.default_destination, coalesce(s.recordings, 0) as recordings,
+    select coalesce(d.name, s.name) as name, d.context, d.default_destination, d.label, d.color, coalesce(s.recordings, 0) as recordings,
            s.last_recording, d.last_seen_at
     from ${devices} d full outer join seen s on s.name = d.name
     order by greatest(s.last_recording, d.last_seen_at) desc nulls last, 1`);
@@ -229,15 +272,111 @@ export async function listDevices(db: Db) {
     name: r.name,
     context: r.context,
     defaultDestination: r.default_destination,
+    label: r.label,
+    color: r.color,
+    badge: deviceBadge(r.name, r.label, r.color),
     recordings: r.recordings,
     lastActive: [r.last_recording, r.last_seen_at].filter(Boolean).map((d) => new Date(d!)).sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
   }));
 }
 
-export async function setDeviceRule(db: Db, name: string, rule: { context?: string | null; defaultDestination?: TaskDestination | null }) {
+export async function setDeviceRule(
+  db: Db,
+  name: string,
+  rule: { context?: string | null; defaultDestination?: TaskDestination | null; label?: string | null; color?: DeviceColor | null }
+) {
   const set = {
     ...(rule.context !== undefined ? { context: rule.context?.trim() || null } : {}),
     ...(rule.defaultDestination !== undefined ? { defaultDestination: rule.defaultDestination } : {}),
+    ...(rule.label !== undefined ? { label: rule.label?.trim() || null } : {}),
+    ...(rule.color !== undefined ? { color: rule.color } : {}),
   };
   await db.insert(devices).values({ name, ...set }).onConflictDoUpdate({ target: devices.name, set });
+}
+
+export type DeviceBadge = { label: string; color: DeviceColor };
+
+/** How a device's badge reads and looks: its label, else its name; its color, else one picked from its name so it stays the same. */
+export function deviceBadge(name: string, label?: string | null, color?: DeviceColor | null): DeviceBadge {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return { label: label?.trim() || name, color: color ?? DEVICE_COLORS[h % DEVICE_COLORS.length] };
+}
+
+/** Every device's badge by name, including devices that have recorded but were never configured. */
+export async function deviceBadges(db: Db): Promise<Record<string, DeviceBadge>> {
+  const [configured, seen] = await Promise.all([
+    db.select({ name: devices.name, label: devices.label, color: devices.color }).from(devices),
+    db.selectDistinct({ name: recordings.device }).from(recordings).where(isNotNull(recordings.device)),
+  ]);
+  const out: Record<string, DeviceBadge> = {};
+  for (const { name } of seen) out[name!] = deviceBadge(name!);
+  for (const d of configured) out[d.name] = deviceBadge(d.name, d.label, d.color);
+  return out;
+}
+
+/** Notes that a meeting has been opened, the first time it is. */
+export async function markViewed(db: Db, transcriptId: string) {
+  await db.update(transcripts).set({ viewedAt: new Date() }).where(and(eq(transcripts.id, transcriptId), sql`${transcripts.viewedAt} is null`));
+}
+
+/** Transcripts that are ready but haven't been opened yet, newest first. */
+export async function listUnviewed(db: Db, context?: string | null, limit = 4) {
+  const rows = await listMeetingsWhere(db, [sql`${transcripts.viewedAt} is null`, ...(context ? [sql`${meetingContext} = ${context}`] : [])], 200);
+  return { count: rows.length, items: rows.slice(0, limit) };
+}
+
+export type CleanupIssue = "empty" | "untitled" | "no-event" | "speakers" | "no-summary" | "tasks";
+
+/** Recent transcripts that still need something: a name, an event, speaker names, a summary, tasks reviewed, or that are empty. */
+export async function listCleanup(db: Db, context?: string | null, limit = 50) {
+  const rows = await listMeetingsWhere(db, context ? [sql`${meetingContext} = ${context}`] : [], 300);
+  return rows
+    .map((m) => {
+      const issues: CleanupIssue[] = [];
+      if (m.empty) issues.push("empty");
+      else {
+        if (m.untitled) issues.push("untitled");
+        if (!m.eventId) issues.push("no-event");
+        if (m.unnamedSpeakers) issues.push("speakers");
+        if (!m.summary) issues.push("no-summary");
+        if (m.pendingTasks) issues.push("tasks");
+      }
+      return { ...m, issues };
+    })
+    .filter((m) => m.issues.length)
+    .slice(0, limit);
+}
+
+/** Transcripts with their title, event and what the home page needs to know about them, newest first. */
+async function listMeetingsWhere(db: Db, where: SQL[], limit: number) {
+  const pe = primaryEvent(db);
+  const rows = await db
+    .select({
+      id: transcripts.id,
+      title: transcripts.title,
+      summary: transcripts.summary,
+      recordedAt: recordings.recordedAt,
+      durationSecs: recordings.durationSecs,
+      device: recordings.device,
+      titleHint: recordings.titleHint,
+      eventId: calendarEvents.id,
+      eventTitle: calendarEvents.title,
+      context: meetingContext,
+      empty: sql<boolean>`(${recordings.durationSecs} = 0 or length(trim(${transcripts.content})) = 0)`,
+      // Diarized labels with no name given. "YOU" and "OTHERS" (the recorder's two sides) read fine as they are.
+      unnamedSpeakers: sql<boolean>`exists (select 1 from jsonb_array_elements(coalesce(${transcripts.speakerSegments}, '[]'::jsonb)) s
+        where s->>'speaker' ~ '^SPEAKER_[0-9]+$' and not (${transcripts.speakerNames} ? (s->>'speaker')))`,
+      pendingTasks: sql<number>`(select count(*)::int from ${tasks} where ${tasks.transcriptId} = ${transcripts.id} and ${tasks.status} = 'pending')`,
+    })
+    .from(transcripts)
+    .innerJoin(recordings, eq(recordings.id, transcripts.recordingId))
+    .leftJoin(pe, eq(pe.transcriptId, transcripts.id))
+    .leftJoin(calendarEvents, eq(calendarEvents.id, pe.eventId))
+    .leftJoin(calendars, eq(calendars.id, calendarEvents.calendarId))
+    .leftJoin(devices, eq(devices.name, recordings.device))
+    .where(where.length ? and(...where) : undefined)
+    .orderBy(desc(recordings.recordedAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...r, displayTitle: meetingTitle(r), untitled: isUntitled(r) }));
 }

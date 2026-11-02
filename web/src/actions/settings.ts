@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { TASK_DESTINATIONS, calendars, createApiKey, deleteApiKey, setDeviceRule, testArchive } from "@debrief/core";
+import { DEVICE_COLORS, TASK_DESTINATIONS, calendars, createApiKey, deleteApiKey, setDeviceRule, testArchive } from "@debrief/core";
 import { saveSettings, setOwnerPassword, settingDef, settingSource } from "@debrief/core/settings";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
@@ -101,15 +101,25 @@ export async function deleteKey(id: string): Promise<Result> {
   }
 }
 
-export async function updateDevice(name: string, rule: { context?: string | null; defaultDestination?: (typeof TASK_DESTINATIONS)[number] | null }): Promise<Result> {
+export async function updateDevice(
+  name: string,
+  rule: { context?: string | null; defaultDestination?: (typeof TASK_DESTINATIONS)[number] | null; label?: string | null; color?: (typeof DEVICE_COLORS)[number] | null }
+): Promise<Result> {
   try {
     await requireViewer();
     const v = z
-      .object({ context: context.nullish().or(z.literal("").transform(() => null)), defaultDestination: z.enum(TASK_DESTINATIONS).nullish() })
+      .object({
+        context: context.nullish().or(z.literal("").transform(() => null)),
+        defaultDestination: z.enum(TASK_DESTINATIONS).nullish(),
+        label: z.string().trim().max(24).nullish(),
+        color: z.enum(DEVICE_COLORS).nullish(),
+      })
       .parse(rule);
     await setDeviceRule(db(), z.string().min(1).max(80).parse(name), {
       ...(rule.context !== undefined ? { context: v.context ?? null } : {}),
       ...(rule.defaultDestination !== undefined ? { defaultDestination: v.defaultDestination ?? null } : {}),
+      ...(rule.label !== undefined ? { label: v.label || null } : {}),
+      ...(rule.color !== undefined ? { color: v.color ?? null } : {}),
     });
     refresh();
     return { ok: true };

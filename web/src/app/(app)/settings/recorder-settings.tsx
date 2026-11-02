@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { Check, Copy, KeyRound, Laptop, Trash2 } from "lucide-react";
+import { DEVICE_COLORS, type DeviceColor } from "@debrief/core/device-colors";
+import type { DeviceBadge as Badge } from "@debrief/core/meetings";
 import { createKey, deleteKey, updateDevice } from "@/actions/settings";
 import { useAction } from "@/components/task-item";
+import { DEVICE_SWATCH, DeviceBadge } from "@/components/device-badge";
 
 type Key = { id: string; name: string; prefix: string; created: string; lastUsed: string | null };
 
@@ -100,22 +103,74 @@ export function ApiKeys({ keys, publicUrl }: { keys: Key[]; publicUrl: string })
   );
 }
 
-type Device = { name: string; context: string | null; defaultDestination: "akiflow" | "linear" | null; recordings: number; lastActive: string | null };
+type Device = {
+  name: string;
+  context: string | null;
+  defaultDestination: "akiflow" | "linear" | null;
+  label: string | null;
+  badge: Badge;
+  recordings: number;
+  lastActive: string | null;
+};
 
 function DeviceRow({ d, contexts }: { d: Device; contexts: string[] }) {
   const [pending, go] = useAction();
   const [ctx, setCtx] = useState(d.context ?? "");
+  const [label, setLabel] = useState(d.label ?? "");
+  const [color, setColor] = useState<DeviceColor>(d.badge.color);
   const options = [...new Set([...contexts, ...(d.context ? [d.context] : [])])];
+  const saveLabel = () => {
+    if (label.trim() === (d.label ?? "")) return;
+    go(() => updateDevice(d.name, { label: label.trim() || null }));
+  };
   return (
-    <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_10rem_8rem]">
+    <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_14rem_10rem_8rem]">
       <div className="flex min-w-0 items-center gap-3">
         <Laptop className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
-          <p className="truncate font-mono text-[0.8125rem]">{d.name}</p>
+          <p className="flex min-w-0 items-center gap-2">
+            <DeviceBadge badge={{ label: label.trim() || d.name, color }} />
+            <span className="truncate font-mono text-[0.6875rem] text-muted-foreground">{d.name}</span>
+          </p>
           <p className="text-[0.6875rem] text-muted-foreground">
             {d.recordings} recording{d.recordings === 1 ? "" : "s"}
             {d.lastActive ? ` · last ${d.lastActive}` : ""}
           </p>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <label className="label md:hidden">Badge</label>
+        <input
+          className="input h-8 text-xs"
+          value={label}
+          maxLength={24}
+          placeholder={d.name}
+          aria-label={`Label for ${d.name}`}
+          onChange={(e) => setLabel(e.target.value)}
+          onBlur={saveLabel}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+        <div className="flex gap-1.5" role="radiogroup" aria-label={`Color for ${d.name}`}>
+          {DEVICE_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={color === c}
+              aria-label={c}
+              disabled={pending}
+              className={`size-4 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring ${color === c ? "ring-2 ring-offset-2 ring-offset-card" : ""}`}
+              style={{ background: DEVICE_SWATCH[c], ["--tw-ring-color" as string]: DEVICE_SWATCH[c] }}
+              onClick={() => {
+                setColor(c);
+                go(async () => {
+                  const r = await updateDevice(d.name, { color: c });
+                  if (!r.ok) setColor(d.badge.color);
+                  return r;
+                });
+              }}
+            />
+          ))}
         </div>
       </div>
       <div>
@@ -173,8 +228,9 @@ export function DeviceSettings({ devices, contexts }: { devices: Device[]; conte
       </div>
       {devices.length ? (
         <div className="divide-y divide-border">
-          <div className="hidden grid-cols-[minmax(0,1fr)_10rem_8rem] gap-3 px-4 py-2 text-[0.6875rem] font-medium text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[minmax(0,1fr)_14rem_10rem_8rem] gap-3 px-4 py-2 text-[0.6875rem] font-medium text-muted-foreground md:grid">
             <span className="pl-7">Device</span>
+            <span>Badge</span>
             <span>Context</span>
             <span>Tasks go to</span>
           </div>
