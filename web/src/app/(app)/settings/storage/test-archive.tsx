@@ -8,7 +8,7 @@ export function TestArchive() {
   const [pending, go] = useAction();
   return (
     <button type="button" className="btn btn-secondary btn-sm" disabled={pending} onClick={() => go(() => testArchiveAction())}>
-      Test the archive
+      Test archive
     </button>
   );
 }

@@ -132,16 +132,18 @@ Open `http://<server>:3000`. Debrief asks for your name, a password and your tim
 
 Everything from here on is in Settings:
 
-| Tab | What's there |
+The sections are listed down the side (on a phone, tap into one), each with a dot: green when it's working, amber when it needs you. Each page shows what most people change; the rest is under **Advanced**.
+
+| Section | What's there |
 |---|---|
-| **General** | Your name, time zone, and the address Debrief is reached at (for links in Slack and tasks). Plus the status of every service. |
-| **Sign-in** | Your password, and single sign-on through Authentik or another OpenID Connect provider. |
-| **Calendars** | Google calendars and ICS feeds, each with a context, and the Google credentials. |
-| **Recordings** | Where recordings are archived, how long the server keeps its copy, and watching a NAS folder. |
-| **Transcription** | The Whisper model, CPU or GPU, language, and speaker labels. |
-| **Claude** | The Anthropic API key for automatic summaries, and the MCP server. |
-| **Slack & tasks** | The Slack webhook, Akiflow and Linear. |
-| **Devices & keys** | API keys for each recorder and Claude client, and each device's context, label and badge color. |
+| **Overview** | Every part at a glance, and the version: which build each service runs, whether one is down or behind, and whether a newer build is out. |
+| **Account** | Your name, email, time zone and working hours; your password, and single sign-on through Authentik or another OpenID Connect provider. The address Debrief is reached at is under Advanced. |
+| **Recorder & devices** | The recorder download, API keys for each recorder and MCP client, and each device's context, label and badge color. |
+| **Calendars** | Your calendars, each with a context, and step-by-step adding: Google with one click, a Google service account, or an ICS link. |
+| **Transcription** | Fast, balanced or most accurate, the language, and speaker labels. CPU or GPU and the rest are under Advanced. |
+| **Storage** | Where recordings go once transcribed (the server, a NAS folder or S3), and watching a NAS folder. |
+| **AI summaries** | The provider that writes summaries and finds action items: Anthropic, OpenAI, Google Gemini, or any OpenAI-compatible server (Ollama, LM Studio, OpenRouter). Plus the MCP address. |
+| **Slack & tasks** | Slack, Akiflow and Linear, each with a Connect button. |
 
 A setting can also go in `.env` under the same name (for example `ANTHROPIC_API_KEY=…`). That value wins, and Settings shows it with a lock.
 
@@ -160,7 +162,7 @@ COMPOSE_FILE=compose.yaml:compose.traefik.yaml
 DEBRIEF_HOST=debrief.example.com
 ```
 
-Then `docker compose up -d` again, and set **Address** in Settings → General to `https://debrief.example.com`.
+Then `docker compose up -d` again, and set **Address** in Settings → Account → Advanced to `https://debrief.example.com`.
 
 **Behind forward auth** (an Authentik outpost guarding the whole host): exempt `/api/recorder` and `/mcp`, which check their own API keys. To turn Debrief's own sign-in off, set `AUTH_MODE=none` in `.env`, and never publish port 3000 directly in that mode.
 
@@ -177,20 +179,24 @@ The sign-in page then offers Authentik, with your password as a fallback.
 
 ### 7. Connect your calendars
 
-In Settings → Calendars, add each calendar with a context, one short word like `work` or `side`.
+In Settings → Calendars, choose **Add a calendar**. It walks you through three steps: where the calendar lives, connecting it (with **Check** to try it first), and naming it with a context, one short word like `work` or `side`.
 
-**Google Calendar.** Debrief needs credentials, pasted or uploaded under **Google credentials**. Use either a service account or your own account.
+**Google, sign in** (recommended). Once set up, connecting is one button and Debrief lists every calendar the account can see, to tick. Google needs an OAuth client from your own Google Cloud project first, a one-time job of about five minutes. The steps in Debrief show the exact address to paste:
 
-- **A service account.** Best for a server.
-  1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**.
-  2. Go to **IAM & Admin → Service Accounts → Create**, then **Keys → Add key → JSON**, and upload that file.
-  3. In Google Calendar, open each calendar's **Settings → Share with specific people** and add the service account's address with **See all event details**.
-  4. Add the calendar by its ID (under **Integrate calendar**; for your main calendar it's your email address).
-- **Your own Google account.** This can read every calendar you can see.
-  1. Run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/cloud-platform`.
-  2. Upload `~/.config/gcloud/application_default_credentials.json`.
+1. [Create a Google Cloud project](https://console.cloud.google.com/projectcreate) and [enable the Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) for it.
+2. In [Google Auth Platform](https://console.cloud.google.com/auth/overview) → **Get started**, name the app Debrief. For **Audience**, choose **Internal** with a Google Workspace account. With a personal Gmail account, choose **External** and then **Publish app** on the Audience page: while an app is in testing, Google signs it out every 7 days. Google warns that your app isn't verified, which is expected.
+3. Under [Clients](https://console.cloud.google.com/auth/clients) → **Create client** → **Web application**, add the redirect URI `https://debrief.example.com/api/google/callback` (your address). Google only accepts https:// here, except for localhost.
+4. Paste the client ID and secret into Debrief, then **Connect Google**.
 
-**An ICS feed** (Outlook, iCloud, or a Google calendar you can't share). Add the calendar's secret iCal / ICS link.
+**Google, service account.** For calendars you'd rather share one by one.
+
+1. In the same Google Cloud project, create a service account under **IAM & Admin → Service accounts**, then **Keys → Add key → JSON**, and upload that file.
+2. In Google Calendar, open each calendar's **Settings and sharing → Share with specific people** and add the service account's address (Debrief shows it, with a copy button) with **See all event details**.
+3. Add the calendar by its ID (under **Integrate calendar**; for your main calendar it's your email address).
+
+Or, with the Google Cloud CLI, run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/cloud-platform` and upload the file it saves; that works like signing in.
+
+**Outlook, iCloud or other.** Any calendar with a private ICS link: Outlook's **Publish a calendar**, Google's **Secret address in iCal format**, or an iCloud public calendar. The steps for each are in Debrief. ICS links update less often; Outlook's can lag by a few hours.
 
 ### 8. Speaker labels (optional)
 
@@ -202,7 +208,7 @@ Without it, transcripts work the same, but the other people on a call aren't tol
 
 ### 9. Summaries, Slack and tasks (optional)
 
-- **Automatic summaries.** Add an Anthropic API key in Settings → Claude. Each new meeting is then summarized, and its action items found, as soon as it's transcribed and matched to its event.
+- **Automatic summaries.** In Settings → AI summaries, pick a provider (Anthropic, OpenAI, Google Gemini, or your own OpenAI-compatible server such as Ollama) and add its key; **Test connection** checks it. Each new meeting is then summarized, and its action items found, as soon as it's transcribed and matched to its event.
 - **Slack.** Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) (*From scratch*), open **Incoming Webhooks**, turn them on, and **Add New Webhook to Workspace** for the channel you want. Paste the URL into Settings → Slack & tasks. For a channel per context, fill in *Slack webhook per context* (`work:https://hooks.slack.com/…,side:https://hooks.slack.com/…`).
 
   Once a meeting has its summary, Slack gets the title, time, length and attendees, the summary, and every action item with its details, owner, due date, priority, destination and a link to the moment it was said. Each meeting is posted once; **Slack → Send again** on a meeting page posts it again.
@@ -231,7 +237,7 @@ Each calendar has a default destination (Settings → Calendars → *Tasks go to
 
 ### 10. Set up recording on each desktop
 
-1. In Debrief, open **Settings → Devices & keys** and create a key for this computer (e.g. *Work MacBook*). Copy it; it's shown once.
+1. In Debrief, open **Settings → Recorder & devices** and create a key for this computer (e.g. *Work MacBook*). Copy it; it's shown once.
 2. Download the recorder from the same page (**Mac** or **Windows**), or from the [latest release](https://github.com/vitafortis/debrief/releases/latest).
    - **Mac:** open the `.dmg` and drag **Debrief Recorder** to Applications. It isn't signed yet, so the first time, right-click it → **Open** → **Open**. (If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/Debrief Recorder.app"`.)
    - **Windows:** run the installer. SmartScreen warns about an unsigned app: **More info → Run anyway**.
@@ -270,15 +276,15 @@ Each calendar has a default destination (Settings → Calendars → *Tasks go to
    MEETINGS_GID=100
    # AUDIO_PATH / EXPORTS_PATH if the share isn't at /mnt/meetings/audio and /mnt/meetings/exports
    ```
-4. `docker compose up -d`, then in Settings → Recordings set **Archive recordings to** *The NAS folder* and press **Test the archive**.
+4. `docker compose up -d`, then in Settings → Storage choose *In a NAS folder*, save, and press **Test archive**.
 
 Archived recordings land in `audio/<device>/<start>_<id>/audio.opus`, beside a `metadata.json` that says when and what it was, so the archive makes sense on its own.
 
-**To S3 instead.** Choose *S3-compatible storage* in Settings → Recordings and fill in the bucket, keys, region and, for anything but AWS, the endpoint (`https://<account>.r2.cloudflarestorage.com`, `https://s3.us-west-004.backblazeb2.com`, `http://minio.lan:9000`). Meetings stored there play straight from the bucket through short-lived links.
+**To S3 instead.** Choose *In S3 storage* in Settings → Storage and fill in the bucket, keys, region and, for anything but AWS, the endpoint (`https://<account>.r2.cloudflarestorage.com`, `https://s3.us-west-004.backblazeb2.com`, `http://minio.lan:9000`). Meetings stored there play straight from the bucket through short-lived links.
 
 ### Recordings from Meetily or other apps
 
-**With Meetily and Syncthing.** This needs the NAS overlay and **Watch the NAS folder** on (Settings → Recordings).
+**With Meetily and Syncthing.** This needs the NAS overlay and **Watch the NAS folder for new audio** on (Settings → Storage → Advanced).
 
 1. **Install Meetily** from its [releases page](https://github.com/Zackriya-Solutions/meetily/releases).
    - On a Mac, allow **Microphone** and **Screen & System Audio Recording** when asked (System Settings → Privacy & Security). Without the second one, the other people on the call aren't recorded.
@@ -293,7 +299,7 @@ Archived recordings land in `audio/<device>/<start>_<id>/audio.opus`, beside a `
 
 **Other recorders.** Put audio files (`.m4a`, `.mp3`, `.wav`, `.mp4`, `.ogg`, `.opus`, `.flac`, `.webm`) anywhere under `audio/<device>/`.
 
-- A timestamp in the file name (`2026-10-22 14.03 Standup.m4a` or `20261022_140300.wav`) is read as the start time, in your time zone (Settings → General).
+- A timestamp in the file name (`2026-10-22 14.03 Standup.m4a` or `20261022_140300.wav`) is read as the start time, in your time zone (Settings → Account).
 - Otherwise the start time is worked out from the file's modified time and length. That works as long as your sync tool keeps modified times (Syncthing and `rsync -a` do).
 
 ## Using Debrief
@@ -302,16 +308,18 @@ Archived recordings land in `audio/<device>/<start>_<id>/audio.opus`, beside a `
 
 1. **Take the call.** The recorder asks (or just starts, by your rules) when the meeting app takes the microphone, and stops when the app lets go. Nothing joins the call.
 2. **Read the summary in Slack**, or open the home page. From the top:
-   - **Finish setting up**, while something is missing: the recorder, a calendar, a Claude API key, and the optional speaker labels and Slack, Akiflow or Linear, each with what it unlocks. It goes once the required ones are done.
+   - **Finish setting up**, while something is missing: the recorder, a calendar, an AI provider, and the optional speaker labels and Slack, Akiflow or Linear, each with what it unlocks. It goes once the required ones are done.
    - **Transcriptions**: what's queued or transcribing, and what's ready that you haven't opened yet.
-   - **The calendar**, by day or week. It opens on your working hours (Settings → General) and scrolls for the rest; a marker shows how many meetings are earlier or later. Beside it, the month marks recorded days, upcoming meetings and days with something to clean up: tap a day to go there. **Coming up** lists your next meetings, with a link to join.
+   - **The calendar**, by day or week. It opens on your working hours (Settings → Account) and scrolls for the rest; a marker shows how many meetings are earlier or later. Beside it, the month marks recorded days, upcoming meetings and days with something to clean up: tap a day to go there. **Coming up** lists your next meetings, with a link to join.
    - **Needs cleanup**: every recent transcript that's untitled, has no calendar event, unnamed speakers, no summary or tasks yet, tasks to review, or is empty, with a button for the fix.
-3. **Get the action items.** With an Anthropic API key (Settings → Claude) they're already there. Otherwise ask Claude *"Extract the action items from today's standup in Debrief"* (see [Connecting Claude](#connecting-claude)).
+3. **Get the action items.** With an AI provider set up (Settings → AI summaries) they're already there. Otherwise ask Claude *"Extract the action items from today's standup in Debrief"* (see [Connecting Claude](#connecting-claude)).
 4. **Review and send them** on the Tasks page (below).
 
 ### The sidebar and calendar filter
 
 Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the home page, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
+
+At the bottom of the sidebar is the version you're running, with a dot: green when every service is up and on the same build, blue when a newer build is out, amber when a service is down or on a different build. Click it to see each service and what to do. Updating is pulling the images and redeploying the stack.
 
 ### A meeting
 
@@ -377,10 +385,10 @@ Use the arrows and **Today** to move around, and click a day's header for the da
 
 ### Settings
 
-See [step 4](#4-set-it-up-in-the-browser) for what each tab holds. A few details:
+See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few details:
 
-- **Calendars:** switching one off hides its events; renaming a context renames it everywhere; *Tasks go to* sets the default destination; **Sync now** syncs straight away (it also syncs every 5 minutes).
-- **Devices & keys:** every computer recordings have come from (the recorder's name, or the Syncthing folder). Nothing is tagged by device until you pick a context for one. Give each a short label and a color: it shows as a badge wherever its recordings appear, and a recording with no calendar event or name shows as *Untitled* with that badge rather than a long date. A device's context is only used for meetings without a calendar event; the event's calendar always wins. API keys are shown once; Debrief keeps only a hash, and revoking one signs that recorder or Claude client out at once.
+- **Calendars:** switching one off hides its events; **Edit** renames its context (everywhere) and sets where its tasks go; **Sync now** syncs straight away (it also syncs every 5 minutes).
+- **Recorder & devices:** every computer recordings have come from (the recorder's name, or the Syncthing folder). Nothing is tagged by device until you pick a context for one. Give each a short label and a color: it shows as a badge wherever its recordings appear, and a recording with no calendar event or name shows as *Untitled* with that badge rather than a long date. A device's context is only used for meetings without a calendar event; the event's calendar always wins. API keys are shown once; Debrief keeps only a hash, and revoking one signs that recorder or Claude client out at once.
 - **Secrets** (API keys, tokens, webhooks) are never shown again once saved. Type a new one to replace it, or **Remove** it.
 
 ## The recorder
@@ -408,7 +416,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each tab holds. A few details
 
 **What's recorded.** Your microphone on the left channel and the computer's audio (everyone else) on the right, as Opus at 48 kbit/s: about 21 MB an hour. Pick a microphone in Settings, or turn off the computer's audio.
 
-**Uploading.** Audio goes up about every 20 seconds while recording, so Debrief has nearly all of it when you hang up. The recording is always written to disk first. With no connection (a plane, a hotel, the server down), it keeps recording and uploads later, retrying with backoff; Settings and the menu show what's waiting and why. Uploads resume exactly where they stopped. A recording the app was quit or crashed in the middle of is uploaded as far as it got; one that never finishes uploading (the laptop died) is transcribed anyway after 12 hours (Settings → Recordings).
+**Uploading.** Audio goes up about every 20 seconds while recording, so Debrief has nearly all of it when you hang up. The recording is always written to disk first. With no connection (a plane, a hotel, the server down), it keeps recording and uploads later, retrying with backoff; Settings and the menu show what's waiting and why. Uploads resume exactly where they stopped. A recording the app was quit or crashed in the middle of is uploaded as far as it got; one that never finishes uploading (the laptop died) is transcribed anyway after 12 hours (Settings → Storage).
 
 **Copies on the computer.** Recordings stay in the recordings folder (Settings → *On this computer*) for 14 days after they're uploaded, then they're deleted; 0 deletes them as soon as Debrief has them. The server (and its archive) keeps the original.
 
@@ -416,7 +424,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each tab holds. A few details
 
 ## Connecting Claude
 
-The MCP server is at `https://debrief.example.com/mcp` behind a reverse proxy, or `http://<server>:3001/mcp` on your LAN. It authenticates every request with a bearer token: an API key from **Settings → Devices & keys** (make one per Claude client), or the fixed token in Settings → Claude if you set one.
+The MCP server is at `https://debrief.example.com/mcp` behind a reverse proxy, or `http://<server>:3001/mcp` on your LAN. It authenticates every request with a bearer token: an API key from **Settings → Recorder & devices** (make one per client), or the fixed token in Settings → AI summaries → Advanced if you set one.
 
 **Claude Code:**
 
@@ -491,18 +499,21 @@ Settings live in the database too, so this backs them up. Recordings are in the 
 
 | What you see | What to check |
 |---|---|
-| A recording never shows up | Settings → General → Status shows the queue. `docker compose logs web` shows the upload, and `docker compose logs transcriber` the transcription. A Meetily recording needs the NAS overlay and watching on, and is picked up once its `metadata.json` says `completed` (other files once they've stopped growing for a minute). |
+| A recording never shows up | Settings → Overview shows the queue and whether the transcriber is running. `docker compose logs web` shows the upload, and `docker compose logs transcriber` the transcription. A Meetily recording needs the NAS overlay and watching on, and is picked up once its `metadata.json` says `completed` (other files once they've stopped growing for a minute). |
 | Stuck on *Queued* | One recording is transcribed at a time, newest first. Check the transcriber log for progress, and the dashboard queue for errors. |
 | *Failed* with "Permission denied" | With the NAS overlay, set `MEETINGS_UID`/`MEETINGS_GID` to the share's owner (`99`/`100` on Unraid). |
 | "The recording isn't on the server or in the archive any more" | The server's copy was removed after archiving, and the archive can't be reached: check the NAS is mounted, or the S3 settings (**Test the archive**). |
-| Archiving fails | `docker compose logs calendar-sync` says why; **Test the archive** in Settings → Recordings checks the settings. |
+| Archiving fails | `docker compose logs calendar-sync` says why; **Test archive** in Settings → Storage checks the settings. |
 | The recorder says "Can't reach Debrief" | **Test connection** in its Settings says why. From outside, `https://<host>/api/recorder/ping` must reach the `web` container, not a sign-in page (exempt `/api/recorder` from forward auth). |
-| The recorder says the API key is unknown | It was revoked, or mistyped. Make a new one in Settings → Devices & keys. |
+| The recorder says the API key is unknown | It was revoked, or mistyped. Make a new one in Settings → Recorder & devices. |
 | Only my side of the call was recorded | Mac: allow Debrief Recorder under Privacy & Security → Screen & System Audio Recording, and check *Record the computer's audio too* is on. |
 | The popup never appears | The recorder's Settings → *When an app uses the microphone* must be on, and the app's rule must be *Ask*. Settings lists the apps it sees using the microphone; if yours isn't there while in a call, check the app has microphone access. |
-| No Slack message | Settings → General → Status shows whether Slack is set up. `docker compose logs calendar-sync` shows "sent to Slack" or Slack's error. Messages go out once a meeting has a summary. |
+| No Slack message | Settings → Overview shows whether Slack is set up. `docker compose logs calendar-sync` shows "sent to Slack" or Slack's error. Messages go out once a meeting has a summary. |
 | A meeting has no calendar event | Is the calendar synced (Settings → Calendars shows the last sync or an error)? Is the time zone right? A recording needs to overlap an event by 70%. Pick the event by hand on the meeting page if needed. |
-| Calendar error "Not Found" or 403 | The service account hasn't been given access to that calendar, or the calendar ID is wrong. |
+| Calendar error "Not Found" or 403 | The service account hasn't been given access to that calendar, or the calendar ID is wrong. Debrief's message on the calendar says which. |
+| Google says "redirect_uri_mismatch" | The redirect URI in Google Cloud must match the one shown in Debrief's steps exactly, https:// included. Behind a proxy, set the address in Settings → Account → Advanced. |
+| Google stops syncing after a week | The OAuth app is still in testing. In Google Auth Platform → Audience, choose **Publish app**, then connect Google again. |
+| A service shows amber in Overview | It's down, or running a different build from the web app. Pull the images and redeploy the whole stack so they match. |
 | No speaker names, only lines | The Hugging Face token isn't set, or the pyannote model's terms weren't accepted (the transcriber log says "Speaker labels are off: …"). Then press **Transcribe again**. |
 | **Send** is greyed out | That destination isn't set up in Settings → Slack & tasks. |
 | Sign-in loops or says "didn't finish" | Authentik's redirect URI must be exactly `https://<host>/api/auth/callback/oidc`, and your proxy must pass the original host. Sign in with the password meanwhile. |
@@ -528,7 +539,14 @@ Settings are made in the app. Each one can also be set in `.env` under the name 
 | Unfinished uploads | `ABANDON_HOURS` | `12` |
 | Transcription | `WHISPER_MODEL`, `WHISPER_DEVICE`, `COMPUTE_TYPE`, `CPU_THREADS`, `LANGUAGE`, `BEAM_SIZE` | `large-v3`, `cpu`, `int8` on CPU, all cores, detected, `5` |
 | Speaker labels | `HF_TOKEN`, `DIARIZE` | on when there's a token |
-| Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AUTO_EXTRACT`, `MCP_TOKEN` | `claude-sonnet-5-5`, `true` |
+| AI provider | `AI_PROVIDER` (`anthropic`, `openai`, `gemini`, `custom`), `AUTO_EXTRACT` | `anthropic`, `true` |
+| Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | `claude-sonnet-5-5` |
+| OpenAI | `OPENAI_API_KEY`, `OPENAI_MODEL` | `gpt-5-mini` |
+| Google Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL` | `gemini-2.5-flash` |
+| Your own server | `AI_BASE_URL` (OpenAI-compatible, e.g. `http://ollama:11434/v1`), `AI_API_KEY`, `AI_MODEL` | |
+| MCP | `MCP_TOKEN` | |
+| Google sign-in | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | |
+| Update check | `UPDATE_CHECK` | `true` |
 | Slack | `SLACK_WEBHOOK_URL`, `SLACK_WEBHOOKS` | |
 | Tasks | `AKIFLOW_WEBHOOK_URL`, `AKIFLOW_DEFAULT_DURATION`, `LINEAR_API_KEY`, `LINEAR_TEAM`, `LINEAR_TEAMS` | `30` minutes |
 

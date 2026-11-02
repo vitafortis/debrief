@@ -251,3 +251,13 @@ export const settings = pgTable("settings", {
   value: text("value").notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
+
+/** Each service's build and when it last checked in, for Settings → Overview and the sidebar. */
+export const serviceStatus = pgTable("service_status", {
+  service: text("service").primaryKey(), // web, transcriber, calendar-sync, mcp
+  version: text("version").notNull(),
+  commit: text("commit"),
+  detail: text("detail"), // "idle", "transcribing", …
+  startedAt: ts("started_at").notNull().defaultNow(),
+  seenAt: ts("seen_at").notNull().defaultNow(),
+});

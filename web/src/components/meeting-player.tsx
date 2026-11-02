@@ -100,7 +100,7 @@ export function MeetingPlayer({
     const onTime = () => setTime(audio.currentTime);
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onError = () => setAudioError("The audio couldn't be loaded. It may have been archived somewhere the server can't reach; check Settings → Recordings.");
+    const onError = () => setAudioError("The audio couldn't be loaded. It may have been archived somewhere the server can't reach; check Settings → Storage.");
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);

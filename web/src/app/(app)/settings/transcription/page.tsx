@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { fieldsFor } from "../fields";
 import { SettingsForm } from "../settings-form";
+import { PageHead } from "../ui";
 
 export const metadata: Metadata = { title: "Transcription · Settings" };
 
 export default async function TranscriptionSettings() {
   return (
-    <SettingsForm
-      title="Transcription"
-      description="faster-whisper on the server, with pyannote for speaker labels. The transcriber picks up changes before its next recording."
-      fields={await fieldsFor("transcription")}
-    />
+    <>
+      <PageHead title="Transcription">Runs on your server with Whisper, so the audio never leaves it. Changes apply from the next recording.</PageHead>
+      <SettingsForm fields={await fieldsFor("transcription")} />
+    </>
   );
 }

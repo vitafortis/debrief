@@ -253,9 +253,9 @@ export function CleanupList({ rows, canSummarize }: { rows: CleanupRow[]; canSum
       )}
       {blocked && (
         <p className="border-t border-border bg-warning/5 px-3.5 py-2 text-xs text-warning">
-          Summaries and tasks need a Claude API key.{" "}
-          <Link href="/settings/claude" className="underline underline-offset-2">
-            Add one in Settings → Claude
+          Summaries and tasks need an AI provider.{" "}
+          <Link href="/settings/ai" className="underline underline-offset-2">
+            Connect one in Settings → AI summaries
           </Link>
           .
         </p>

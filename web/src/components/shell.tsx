@@ -20,6 +20,7 @@ import { Logo } from "@/components/logo";
 import { contextColor } from "@/lib/colors";
 import { setContext } from "@/actions/context";
 import { signOutAction } from "@/actions/session";
+import { VersionBadge, type BuildStatus } from "@/components/version-badge";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -65,7 +66,7 @@ export function Shell({
   contexts,
   context,
   pendingTasks,
-  version,
+  build,
 }: {
   children: React.ReactNode;
   viewer: { name: string | null; email: string | null };
@@ -73,7 +74,7 @@ export function Shell({
   contexts: string[];
   context: string | null;
   pendingTasks: number;
-  version: string;
+  build: BuildStatus;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -177,7 +178,7 @@ export function Shell({
           >
             {theme === "dark" ? <Sun /> : <Moon />}
           </button>
-          {!collapsed && <span className="ml-1 truncate font-mono text-[0.6875rem] text-muted-foreground/70">v{version}</span>}
+          <VersionBadge build={build} collapsed={collapsed} />
           {canSignOut && (
             <form action={signOutAction} className={collapsed ? "" : "ml-auto"}>
               <button className="btn btn-ghost btn-icon btn-sm" title="Sign out">

@@ -1,7 +1,7 @@
 /**
  * calendar-sync: pulls calendar events every few minutes and links
  * transcripts to their meetings. Also wakes up when the transcriber finishes
- * a recording (to link it, have Claude summarize it when an API key is set,
+ * a recording (to link it, have the AI provider summarize it when one is set,
  * and archive it), when a summary is saved (to write the notes file and tell
  * Slack), when "Sync now" is pressed, and when settings change. Each pass
  * also archives recordings, removes the server's old copies and finishes
@@ -13,12 +13,13 @@ import {
   autoExtract,
   closeDb,
   correlateTranscript,
-  extractWithClaude,
+  extractWithAi,
   getDb,
   loadSettings,
   publishMeeting,
   pruneLocalCopies,
   settingNumber,
+  startStatusReports,
 } from "@debrief/core";
 import { registerConfiguredCalendars, syncAllCalendars } from "@debrief/core/calendar-sync";
 import { waitForSchema } from "@debrief/core/migrate";
@@ -31,6 +32,7 @@ await waitForSchema();
 const db = getDb();
 await loadSettings(db);
 await registerConfiguredCalendars(db);
+const status = startStatusReports(db, "calendar-sync");
 
 /** Archiving, pruning and abandoned uploads; failures are logged and retried next pass. */
 async function housekeeping() {
@@ -105,7 +107,7 @@ async function listen() {
       }
       if (autoExtract()) {
         try {
-          const r = await extractWithClaude(db, n.payload);
+          const r = await extractWithAi(db, n.payload);
           log(`Transcript ${n.payload}: summarized, ${r.tasks.length} action item(s)`);
         } catch (err) {
           log("Couldn't summarize:", (err as Error).message);
@@ -133,6 +135,7 @@ schedule();
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, async () => {
     clearInterval(timer);
+    clearInterval(status);
     await closeDb();
     process.exit(0);
   });

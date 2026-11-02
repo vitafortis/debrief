@@ -156,7 +156,7 @@ export function RetryButton({ recordingId, label = "Transcribe again" }: { recor
   );
 }
 
-/** This meeting's action items, with extraction by Claude and adding by hand. */
+/** This meeting's action items, with extraction by the AI provider and adding by hand. */
 export function MeetingTasks({
   transcriptId,
   title,
@@ -188,7 +188,7 @@ export function MeetingTasks({
           {canExtract && (
             <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => go(() => extractTasks(transcriptId))}>
               {pending ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
-              {extractedAt ? "Extract again" : "Extract with Claude"}
+              {extractedAt ? "Summarize again" : "Summarize"}
             </button>
           )}
         </div>
@@ -221,10 +221,10 @@ export function MeetingTasks({
           {extractedAt ? (
             "No action items in this meeting."
           ) : canExtract ? (
-            "Nothing extracted yet."
+            "Not summarized yet."
           ) : (
             <>
-              <p>Ask Claude, through the Debrief MCP server:</p>
+              <p>Connect an AI provider in Settings, or ask your assistant through the Debrief MCP server:</p>
               <button
                 className="mt-2 rounded-lg border border-dashed border-border px-3 py-2 text-left font-mono text-[0.6875rem] hover:border-primary/50 hover:text-foreground"
                 onClick={() => {

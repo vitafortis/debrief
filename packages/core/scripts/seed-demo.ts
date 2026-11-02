@@ -10,10 +10,11 @@ import { runMigrations } from "../src/migrate";
 import { calendarEvents, calendars, devices, eventAttendees, recordings, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
 import { correlateTranscript } from "../src/correlate";
 import { saveSettings } from "../src/settings";
+import { reportStatus } from "../src/system";
 
 const db = getDb();
 await runMigrations();
-await db.execute(sql`truncate calendars, calendar_events, event_attendees, recordings, transcripts, transcript_events, tasks, devices, uploads, api_keys, settings cascade`);
+await db.execute(sql`truncate calendars, calendar_events, event_attendees, recordings, transcripts, transcript_events, tasks, devices, uploads, api_keys, settings, service_status cascade`);
 
 const TZ = process.env.TZ || "America/Chicago";
 // Wall-clock time in TZ, `dayOffset` days from today.
@@ -296,5 +297,8 @@ const linked = await db.select({ n: sql<number>`count(*)::int` }).from(transcrip
 console.log(`Demo data ready: ${linked[0].n} transcripts linked to events.`);
 // What the owner would have set in Settings (the environment still wins, as in the e2e tests).
 await saveSettings(db, { OWNER_NAME: "Alex", TZ, PUBLIC_URL: "https://debrief.example.com", WHISPER_MODEL: "large-v3" });
+
+// Every service checked in just now, on the build the demo server runs.
+for (const service of ["transcriber", "calendar-sync", "mcp"] as const) await reportStatus(db, service, service === "transcriber" ? "idle" : null);
 
 await closeDb();

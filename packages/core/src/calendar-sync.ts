@@ -5,7 +5,7 @@ import ical, { type VEvent } from "node-ical";
 import type { Db } from "./db";
 import { calendarEvents, calendars, eventAttendees } from "./schema";
 import { correlateUnmatched } from "./correlate";
-import { setting, settingNumber } from "./settings";
+import { saveSettings, setting, settingNumber } from "./settings";
 
 /** A calendar event in the shape Debrief stores, whatever it came from. */
 export type NormalizedEvent = {
@@ -117,7 +117,7 @@ export function normalizeGoogleEvent(e: GoogleEvent): NormalizedEvent | null {
 
 export async function fetchGoogleEvents(calendarId: string, from: Date, to: Date): Promise<NormalizedEvent[]> {
   const client = await googleAuth();
-  if (!client) throw new Error("Google Calendar isn't set up: GOOGLE_CREDENTIALS_FILE is not set.");
+  if (!client) throw new Error("Google isn't connected. Connect it in Settings → Calendars.");
   const out: NormalizedEvent[] = [];
   let pageToken: string | undefined;
   do {
@@ -151,6 +151,82 @@ export async function listGoogleCalendars() {
     "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader"
   );
   return (data.items ?? []).map((c) => ({ id: c.id, name: c.summaryOverride ?? c.summary ?? c.id, primary: !!c.primary }));
+}
+
+/** Google's sign-in, for "Connect Google": needs an OAuth client made in the owner's own Google Cloud project. */
+export const GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+
+export const googleOAuthReady = () => !!(setting("GOOGLE_OAUTH_CLIENT_ID") && setting("GOOGLE_OAUTH_CLIENT_SECRET"));
+
+function oauthClient(redirectUri: string) {
+  return new OAuth2Client(setting("GOOGLE_OAUTH_CLIENT_ID"), setting("GOOGLE_OAUTH_CLIENT_SECRET"), redirectUri);
+}
+
+/** Where "Connect Google" sends you. offline + consent, so Google hands back a refresh token every time. */
+export function googleConnectUrl(redirectUri: string, state: string) {
+  return oauthClient(redirectUri).generateAuthUrl({ access_type: "offline", prompt: "consent", scope: [GOOGLE_SCOPE, "openid", "email"], state, include_granted_scopes: true });
+}
+
+/**
+ * Trades Google's code for a refresh token and keeps it as the Google
+ * credentials, in the same "authorized_user" shape gcloud writes.
+ */
+export async function googleConnect(db: Db, code: string, redirectUri: string) {
+  const { tokens } = await oauthClient(redirectUri).getToken(code);
+  if (!tokens.refresh_token) throw new Error("Google didn't send a refresh token. Remove Debrief's access at myaccount.google.com/permissions, then connect again.");
+  if (tokens.scope && !tokens.scope.includes(GOOGLE_SCOPE)) throw new Error("Tick the box that lets Debrief see your calendars, then connect again.");
+  let account: string | null = null;
+  if (tokens.id_token) {
+    try {
+      account = JSON.parse(Buffer.from(tokens.id_token.split(".")[1], "base64url").toString()).email ?? null;
+    } catch {
+      // The email only labels the connection.
+    }
+  }
+  const creds = { type: "authorized_user", client_id: setting("GOOGLE_OAUTH_CLIENT_ID"), client_secret: setting("GOOGLE_OAUTH_CLIENT_SECRET"), refresh_token: tokens.refresh_token, account };
+  await saveSettings(db, { GOOGLE_CREDENTIALS: JSON.stringify(creds) });
+  return account;
+}
+
+/** What the Google credentials are, without the secrets: for Settings. */
+export async function googleCredentialInfo(): Promise<{ kind: "none" | "account" | "service"; email: string | null; fromFile: boolean }> {
+  const raw = await googleCredentials();
+  const fromFile = !!process.env.GOOGLE_CREDENTIALS_FILE && raw !== setting("GOOGLE_CREDENTIALS").trim();
+  if (!raw) return { kind: "none", email: null, fromFile };
+  try {
+    const j = JSON.parse(raw);
+    if (j.type === "service_account") return { kind: "service", email: j.client_email ?? null, fromFile };
+    return { kind: "account", email: j.account ?? null, fromFile };
+  } catch {
+    return { kind: "none", email: null, fromFile };
+  }
+}
+
+/** Tries a calendar before it's added: its name and how many events it has in the sync window. */
+export async function checkCalendar(source: "google" | "ics", externalId: string) {
+  const { from, to } = syncWindow();
+  try {
+    if (source === "ics") {
+      const events = await fetchIcsEvents(externalId, from, to);
+      return { events: events.length, name: null as string | null };
+    }
+    const events = await fetchGoogleEvents(externalId, from, to);
+    const listed = await listGoogleCalendars().catch(() => []);
+    return { events: events.length, name: listed.find((c) => c.id === externalId)?.name ?? null };
+  } catch (err) {
+    throw new Error(explainCalendarError(source, (err as Error).message));
+  }
+}
+
+/** Google's and the feed server's errors, as what to do about them. */
+export function explainCalendarError(source: string, message: string) {
+  const info = /not ?found|404/i.test(message) ? "notfound" : /403|forbidden|insufficient/i.test(message) ? "denied" : /invalid_grant|401/i.test(message) ? "expired" : null;
+  if (source === "google") {
+    if (info === "notfound") return "Google said this calendar doesn't exist for Debrief. Check the calendar ID, and with a service account, share the calendar with it.";
+    if (info === "denied") return "Google won't let Debrief read this calendar. Share it with the service account, or connect an account that can see it.";
+    if (info === "expired") return "Google's sign-in has expired or was revoked. Connect Google again.";
+  } else if (info === "notfound" || info === "denied") return "The feed's server refused the link. Copy it again: private links change when they're reset.";
+  return message;
 }
 
 // ── ICS feeds (Outlook, a Google "secret address", anything else) ─────────
@@ -285,7 +361,7 @@ export async function syncAllCalendars(db: Db) {
       await db.update(calendars).set({ lastSyncedAt: new Date(), lastError: null }).where(eq(calendars.id, cal.id));
       results.push({ calendar: cal.name, events: events.length });
     } catch (err) {
-      const message = (err as Error).message.slice(0, 500);
+      const message = explainCalendarError(cal.source, (err as Error).message).slice(0, 500);
       await db.update(calendars).set({ lastError: message }).where(eq(calendars.id, cal.id));
       results.push({ calendar: cal.name, error: message });
     }

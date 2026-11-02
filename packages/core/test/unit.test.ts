@@ -129,3 +129,59 @@ test("S3 links are path-style, presigned and expire", async () => {
     for (const k of Object.keys(env)) delete process.env[k];
   }
 });
+
+// ── AI providers ──────────────────────────────────────────────────────────
+
+import { plainSchema, toolInput, toolRequest } from "../src/ai";
+import { newerVersion, versionFromRun } from "../src/system";
+import { explainCalendarError } from "../src/calendar-sync";
+
+const tool = { name: "save", description: "Save it.", schema: { $schema: "x", type: "object", additionalProperties: false, properties: { a: { type: "string" } } } };
+const req = { system: "sys", user: "hi", tool, maxTokens: 100 };
+
+test("Anthropic is asked for a forced tool call with its own headers", () => {
+  const r = toolRequest({ provider: "anthropic", key: "k", model: "claude-sonnet-5-5", baseUrl: "https://api.anthropic.com/v1" }, req);
+  assert.equal(r.url, "https://api.anthropic.com/v1/messages");
+  assert.equal(r.headers["x-api-key"], "k");
+  assert.deepEqual(r.body.tool_choice, { type: "tool", name: "save" });
+  assert.equal(r.body.system, "sys");
+});
+
+test("OpenAI-style providers get a forced function call; Gemini and your own server get a plain schema", () => {
+  const openai = toolRequest({ provider: "openai", key: "k", model: "gpt-5-mini", baseUrl: "https://api.openai.com/v1" }, req);
+  assert.equal(openai.url, "https://api.openai.com/v1/chat/completions");
+  assert.equal(openai.headers.authorization, "Bearer k");
+  assert.equal(openai.body.max_completion_tokens, 100);
+  assert.deepEqual(openai.body.tool_choice, { type: "function", function: { name: "save" } });
+
+  const local = toolRequest({ provider: "custom", key: "", model: "llama3.1", baseUrl: "http://ollama:11434/v1" }, req);
+  assert.equal(local.headers.authorization, undefined);
+  assert.equal(local.body.max_completion_tokens, undefined);
+  const params = (local.body.tools as { function: { parameters: Record<string, unknown> } }[])[0].function.parameters;
+  assert.deepEqual(params, { type: "object", properties: { a: { type: "string" } } });
+  assert.deepEqual(plainSchema([{ $schema: 1, b: { additionalProperties: true, c: 2 } }]), [{ b: { c: 2 } }]);
+});
+
+test("the tool's input is read from either kind of reply, or from JSON a model wrote instead", () => {
+  assert.deepEqual(toolInput("anthropic", { content: [{ type: "text" }, { type: "tool_use", name: "save", input: { a: "x" } }] }, "save"), { a: "x" });
+  assert.deepEqual(toolInput("openai", { choices: [{ message: { tool_calls: [{ function: { name: "save", arguments: '{"a":"y"}' } }] } }] }, "save"), { a: "y" });
+  assert.deepEqual(toolInput("custom", { choices: [{ message: { content: '```json\n{"a":"z"}\n```' } }] }, "save"), { a: "z" });
+  assert.equal(toolInput("custom", { choices: [{ message: { content: "Sorry, I can't." } }] }, "save"), undefined);
+});
+
+// ── Versions and calendar errors ──────────────────────────────────────────
+
+test("an image build's run number is its patch version, compared as numbers", () => {
+  assert.equal(versionFromRun("0.1.16", 18), "0.1.18");
+  assert.equal(newerVersion("0.1.10", "0.1.9"), true);
+  assert.equal(newerVersion("0.1.9", "0.1.10"), false);
+  assert.equal(newerVersion("0.1.16", "0.1.16"), false);
+  assert.equal(newerVersion("0.2.1", "0.1.99"), true);
+});
+
+test("calendar errors say what to do", () => {
+  assert.match(explainCalendarError("google", "Not Found"), /share the calendar/);
+  assert.match(explainCalendarError("google", "invalid_grant"), /Connect Google again/);
+  assert.match(explainCalendarError("ics", "HTTP 404"), /Copy it again/);
+  assert.equal(explainCalendarError("google", "socket hang up"), "socket hang up");
+});

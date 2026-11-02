@@ -1,12 +1,14 @@
-import { PageHeader } from "@/components/ui";
-import { SettingsTabs } from "./tabs";
+import { settingsStatus } from "@/lib/settings-status";
+import { SettingsNav } from "./nav";
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const { sections, needs } = await settingsStatus();
   return (
-    <div>
-      <PageHeader title="Settings" description="Everything Debrief needs, in one place. A value set in .env wins and shows a lock." />
-      <SettingsTabs />
-      <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">{children}</div>
+    <div className="md:flex md:min-h-full">
+      <SettingsNav sections={sections} needs={needs} />
+      <div className="min-w-0 flex-1 px-4 pt-5 pb-10 md:px-8 md:pt-8">
+        <div className="mx-auto max-w-3xl md:mx-0">{children}</div>
+      </div>
     </div>
   );
 }

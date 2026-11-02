@@ -18,6 +18,7 @@ import {
   TASK_STATUSES,
   bearer,
   createLinearIssue,
+  startStatusReports,
   getDb,
   getMeeting,
   integrationStatus,
@@ -393,6 +394,7 @@ async function readBody(req: http.IncomingMessage) {
 }
 
 await waitForSchema();
+startStatusReports(db(), "mcp");
 
 http
   .createServer(async (req, res) => {

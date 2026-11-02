@@ -6,6 +6,7 @@ import { saveExtractedTasks, taskInput } from "./tasks";
 import { requestPublish } from "./notes";
 import { z } from "zod";
 import { setting, settingBool, timeZone } from "./settings";
+import { aiConfigured, callTool } from "./ai";
 
 export function clock(secs: number) {
   const s = Math.max(0, Math.floor(secs));
@@ -24,14 +25,14 @@ export function speakerName(names: Record<string, string>, speaker: string | nul
   return speaker.replace(/^SPEAKER_0*(\d+)$/, (_, n) => `Speaker ${Number(n) + 1}`);
 }
 
-/** The transcript as plain text, one speaker turn per line with its time, for Claude or an export. */
+/** The transcript as plain text, one speaker turn per line with its time, for a model or an export. */
 export function transcriptText(m: Pick<Meeting, "transcript">) {
   const segs = m.transcript.speakerSegments;
   if (!segs?.length) return m.transcript.content;
   return segs.map((s) => `[${clock(s.start)}] ${speakerName(m.transcript.speakerNames, s.speaker)}: ${s.text.trim()}`).join("\n");
 }
 
-/** Everything Claude needs to read a meeting: when, who, which calendar, and what was said. */
+/** Everything a model needs to read a meeting: when, who, which calendar, and what was said. */
 export function meetingBrief(m: Meeting) {
   const lines = [
     `Meeting: ${m.displayTitle}`,
@@ -57,47 +58,24 @@ Leave out small talk, decisions with no follow-up, and things already done in th
 
 const extraction = z.object({ summary: z.string().max(4000), tasks: z.array(taskInput).max(50) });
 
-export const extractionAvailable = () => !!setting("ANTHROPIC_API_KEY");
+/** Whether a model is set up to summarize here (Settings → AI summaries). */
+export const extractionAvailable = aiConfigured;
 /** Summarize every new transcript as soon as it's linked (AUTO_EXTRACT=false to only do it on request). */
 export const autoExtract = () => extractionAvailable() && settingBool("AUTO_EXTRACT");
 
 /**
- * Has Claude (through the API) summarize a meeting and pull out its action
- * items, then saves both. Needs ANTHROPIC_API_KEY; without it, use the MCP
- * tools from a Claude client instead.
+ * Has the chosen model summarize a meeting and pull out its action items,
+ * then saves both. Without a provider, use the MCP tools from an assistant.
  */
-export async function extractWithClaude(db: Db, transcriptId: string) {
-  const key = setting("ANTHROPIC_API_KEY");
-  if (!key) throw new Error("Set ANTHROPIC_API_KEY to extract tasks here, or ask Claude through the MCP server.");
+export async function extractWithAi(db: Db, transcriptId: string) {
   const m = await getMeeting(db, transcriptId);
   if (!m) throw new Error("No such transcript.");
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    signal: AbortSignal.timeout(180_000),
-    body: JSON.stringify({
-      model: setting("ANTHROPIC_MODEL"),
-      max_tokens: 8000,
-      system: `You review meeting transcripts and record what needs to happen next.\n\n${EXTRACTION_GUIDE}\n\nAlso write a summary: 2–5 sentences on what the meeting covered and decided.`,
-      tools: [
-        {
-          name: "save_meeting_notes",
-          description: "Save the meeting summary and its action items.",
-          input_schema: z.toJSONSchema(extraction),
-        },
-      ],
-      tool_choice: { type: "tool", name: "save_meeting_notes" },
-      messages: [{ role: "user", content: meetingBrief(m) }],
-    }),
+  const input = await callTool({
+    system: `You review meeting transcripts and record what needs to happen next.\n\n${EXTRACTION_GUIDE}\n\nAlso write a summary: 2–5 sentences on what the meeting covered and decided.`,
+    user: meetingBrief(m),
+    tool: { name: "save_meeting_notes", description: "Save the meeting summary and its action items.", schema: z.toJSONSchema(extraction) as Record<string, unknown> },
   });
-  const body = (await res.json().catch(() => null)) as {
-    content?: { type: string; name?: string; input?: unknown }[];
-    error?: { message?: string };
-  } | null;
-  if (!res.ok) throw new Error(`Claude: ${body?.error?.message ?? `HTTP ${res.status}`}`);
-  const call = body?.content?.find((c) => c.type === "tool_use" && c.name === "save_meeting_notes");
-  const out = extraction.parse(call?.input);
+  const out = extraction.parse(input);
   await db.update(transcripts).set({ summary: out.summary }).where(eq(transcripts.id, transcriptId));
   const saved = await saveExtractedTasks(db, transcriptId, out.tasks);
   await requestPublish(db, transcriptId);

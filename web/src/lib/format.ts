@@ -1,6 +1,6 @@
 import { timeZone } from "@debrief/core/settings";
 
-/** Times are shown in the owner's zone (Settings → General), on the server, so pages render the same everywhere. */
+/** Times are shown in the owner's zone (Settings → Account), on the server, so pages render the same everywhere. */
 export const tz = () => timeZone();
 
 const cache = new Map<string, Intl.DateTimeFormat>();
