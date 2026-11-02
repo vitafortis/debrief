@@ -16,6 +16,14 @@ on:
 permissions:
   contents: write
 
+# One run at a time per branch, so releases are made in order and the newest
+# is the one marked latest. A pull request's newer push cancels its older run;
+# on main a newer run waits for the one in progress (cancelling that mid-release
+# could leave a release without its installers) and replaces any still waiting.
+concurrency:
+  group: recorder-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -90,11 +98,21 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Belt and braces for re-runs: only mark it latest if no higher recorder release exists.
+      - id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          newest=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
+            --jq '.[] | select((.draft or .prerelease) | not) | .tag_name | select(startswith("recorder-v")) | ltrimstr("recorder-v")' | sort -V | tail -n1)
+          top=$(printf '%s\n%s\n' "$newest" "$VERSION" | sort -V | tail -n1)
+          echo "make_latest=$([ "$top" = "$VERSION" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: recorder-v${{ needs.version.outputs.version }}
           target_commitish: ${{ github.sha }}
           name: Debrief Recorder ${{ needs.version.outputs.version }}
-          make_latest: true
+          make_latest: ${{ steps.latest.outputs.make_latest }}
           files: dist/*
           body: Unsigned builds. macOS — open the .dmg, drag to Applications, then right-click → Open the first time. Windows — run the installer; SmartScreen → More info → Run anyway.
