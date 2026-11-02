@@ -41,8 +41,7 @@ export function SettingsNav({ sections, needs }: { sections: Record<Exclude<Sect
   return (
     <>
       {/* Wide screens */}
-      <nav aria-label="Settings sections" className="sticky top-0 hidden max-h-screen w-60 shrink-0 flex-col gap-0.5 self-start overflow-y-auto border-r border-border px-3 py-6 md:flex">
-        <h1 className="mb-3 px-2 text-lg font-semibold tracking-tight">Settings</h1>
+      <nav aria-label="Settings sections" className="sticky top-0 hidden max-h-screen w-60 shrink-0 flex-col gap-0.5 self-start overflow-y-auto border-r border-border pr-3 pb-6 pl-6 md:flex">
         {GROUPS.map((g, i) => (
           <div key={i} className="flex flex-col gap-0.5">
             {g.label && <p className="mt-4 mb-1 px-2 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">{g.label}</p>}
@@ -69,8 +68,7 @@ export function SettingsNav({ sections, needs }: { sections: Record<Exclude<Sect
 
       {/* Phones */}
       {atIndex ? (
-        <nav aria-label="Settings sections" className="space-y-4 px-4 pt-5 md:hidden">
-          <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+        <nav aria-label="Settings sections" className="space-y-4 px-4 md:hidden">
           {GROUPS.slice(1).map((g) => (
             <div key={g.label} className="space-y-1.5">
               <p className="px-1 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">{g.label}</p>
@@ -93,9 +91,9 @@ export function SettingsNav({ sections, needs }: { sections: Record<Exclude<Sect
           ))}
         </nav>
       ) : (
-        <div className="px-4 pt-3 md:hidden">
+        <div className="px-4 pb-3 md:hidden">
           <Link href="/settings" className="inline-flex items-center gap-0.5 text-sm font-medium text-primary">
-            <ChevronLeft className="size-4" /> Settings
+            <ChevronLeft className="size-4" /> All settings
           </Link>
         </div>
       )}
