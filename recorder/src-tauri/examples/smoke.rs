@@ -21,14 +21,20 @@ fn main() -> anyhow::Result<()> {
         return upload_and_wait(&args, &root);
     }
     eprintln!("Opening the microphone{}…", if system { " and system audio" } else { "" });
-    let rec = audio::Recording::start(&local.audio(&root), "", system)?;
+    // SMOKE_APP=<bundle id or exe path> records just that app's sound.
+    let call = match std::env::var("SMOKE_APP") {
+        Ok(id) if system => audio::CallAudio::App { name: id.clone(), id },
+        _ if system => audio::CallAudio::Everything,
+        _ => audio::CallAudio::Off,
+    };
+    let rec = audio::Recording::start(&local.audio(&root), "", call)?;
     println!("Recording {secs} s… warnings: {:?}", rec.warnings);
     std::thread::sleep(std::time::Duration::from_secs(secs));
     let f = rec.stop()?;
     local.duration_secs = Some(f.duration_secs);
     local.ended_at = Some(chrono::Utc::now());
     local.save(&root)?;
-    println!("{:.2} s, system audio heard: {}, {} bytes, file {}", f.duration_secs, f.system_heard, std::fs::metadata(local.audio(&root))?.len(), local.audio(&root).display());
+    println!("{:.2} s, mic heard: {}, system audio heard: {}, {} bytes, file {}", f.duration_secs, f.mic_heard, f.system_heard, std::fs::metadata(local.audio(&root))?.len(), local.audio(&root).display());
     upload_and_wait(&args, &root)
 }
 
