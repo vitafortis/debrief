@@ -125,7 +125,7 @@ export function SummaryEditor({ transcriptId, summary }: { transcriptId: string;
   const [pending, go] = useAction();
   if (!editing)
     return summary ? (
-      <button className="group w-full text-left text-[0.8125rem] leading-relaxed text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)}>
+      <button className="group max-h-48 w-full overflow-y-auto text-left text-[0.8125rem] leading-relaxed text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)}>
         {summary}
       </button>
     ) : (
@@ -148,10 +148,10 @@ export function SummaryEditor({ transcriptId, summary }: { transcriptId: string;
   );
 }
 
-export function RetryButton({ recordingId, label = "Transcribe again" }: { recordingId: string; label?: string }) {
+export function RetryButton({ recordingId, label = "Transcribe again", ghost }: { recordingId: string; label?: string; ghost?: boolean }) {
   const [pending, go] = useAction();
   return (
-    <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => go(() => retranscribe(recordingId))}>
+    <button className={`btn btn-sm ${ghost ? "btn-ghost" : "btn-secondary"}`} disabled={pending} onClick={() => go(() => retranscribe(recordingId))}>
       <RotateCcw /> {label}
     </button>
   );
@@ -206,7 +206,9 @@ export function MeetingTasks({
   return (
     <section id="tasks" className="card scroll-mt-4 overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">Action items</h2>
+        <h2 className="text-sm font-semibold">
+          Action items{tasks.length > 0 && <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">{tasks.length}</span>}
+        </h2>
         <div className="flex gap-1.5">
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(!adding)}>
             <Plus /> Add
@@ -237,7 +239,7 @@ export function MeetingTasks({
         </form>
       )}
       {tasks.length ? (
-        <div className="divide-y divide-border">
+        <div className="max-h-[26rem] divide-y divide-border overflow-y-auto">
           {tasks.map((t) => (
             <TaskItem key={t.id} task={t} integrations={integrations} />
           ))}
