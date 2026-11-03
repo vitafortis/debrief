@@ -35,6 +35,15 @@ struct Prompt {
     kind: &'static str, // "start" | "stopped" | "error"
     app: String,
     message: String,
+    /// The app's bundle id or exe, to record just its sound.
+    #[serde(skip)]
+    app_id: String,
+}
+
+impl Prompt {
+    fn error(message: impl Into<String>) -> Self {
+        Self { kind: "error", app: String::new(), message: message.into(), app_id: String::new() }
+    }
 }
 
 struct State {
@@ -73,7 +82,8 @@ fn fmt_elapsed(d: Duration) -> String {
 
 // --- Recording ---------------------------------------------------------------
 
-fn start_recording(app: &AppHandle, trigger: Option<String>, title: Option<String>) -> anyhow::Result<()> {
+/// Starts recording; `trigger` is the meeting app (name and id) when one started it.
+fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Option<String>) -> anyhow::Result<()> {
     let st = app.state::<State>();
     let mut active = st.active.lock().unwrap();
     if active.is_some() {
@@ -81,10 +91,16 @@ fn start_recording(app: &AppHandle, trigger: Option<String>, title: Option<Strin
     }
     let s = st.settings.read().unwrap().clone();
     let root = st.recordings.read().unwrap().clone();
+    let call = match &trigger {
+        _ if !s.capture_system_audio => audio::CallAudio::Off,
+        Some(u) if s.only_meeting_app && !u.id.is_empty() => audio::CallAudio::App { name: u.name.clone(), id: u.id.clone() },
+        _ => audio::CallAudio::Everything,
+    };
+    let trigger = trigger.map(|u| u.name);
     let local = store::Local::new(trigger.clone(), title.filter(|t| !t.trim().is_empty()));
     std::fs::create_dir_all(local.dir(&root))?;
     local.save(&root)?;
-    let rec = match audio::Recording::start(&local.audio(&root), &s.microphone, s.capture_system_audio) {
+    let rec = match audio::Recording::start(&local.audio(&root), &s.microphone, call) {
         Ok(r) => r,
         Err(e) => {
             let _ = std::fs::remove_dir_all(local.dir(&root));
@@ -107,18 +123,21 @@ fn stop_recording(app: &AppHandle, why: &str) {
     let Some(a) = st.active.lock().unwrap().take() else { return };
     let root = st.recordings.read().unwrap().clone();
     let mut local = a.local;
-    let silent_system = st.settings.read().unwrap().capture_system_audio;
+    let s = st.settings.read().unwrap().clone();
     match a.rec.stop() {
         Ok(f) => {
             local.duration_secs = Some(f.duration_secs);
-            if silent_system && !f.system_heard && f.duration_secs > 60.0 {
+            if !f.mic_heard && f.duration_secs > 60.0 {
+                show_prompt(app, Prompt::error("Your microphone recorded only silence. Check the microphone in Settings, and that Debrief Recorder may use it (macOS: System Settings → Privacy & Security → Microphone)."));
+            } else if s.capture_system_audio && !f.system_heard && f.duration_secs > 60.0 {
+                let only_app = s.only_meeting_app && a.trigger.is_some();
                 show_prompt(
                     app,
-                    Prompt {
-                        kind: "error",
-                        app: String::new(),
-                        message: "Only your microphone had sound. If the call was on speakers or headphones, allow Debrief Recorder to record system audio (macOS: System Settings → Privacy & Security → Screen & System Audio Recording).".into(),
-                    },
+                    Prompt::error(if only_app {
+                        "Only your microphone had sound. If the call was on speakers or headphones, allow Debrief Recorder to record system audio (macOS: System Settings → Privacy & Security → Screen & System Audio Recording), or turn off \"Just the meeting app\" in Settings."
+                    } else {
+                        "Only your microphone had sound. If the call was on speakers or headphones, allow Debrief Recorder to record system audio (macOS: System Settings → Privacy & Security → Screen & System Audio Recording)."
+                    }),
                 );
             }
         }
@@ -130,14 +149,7 @@ fn stop_recording(app: &AppHandle, why: &str) {
     local.ended_at = Some(chrono::Utc::now());
     let _ = local.save(&root);
     if !st.uploader.status.lock().unwrap().configured {
-        show_prompt(
-            app,
-            Prompt {
-                kind: "error",
-                app: String::new(),
-                message: "Recorded, but this computer isn't connected to Debrief yet, so it can't upload. Open Settings and add your server and an API key (Debrief → Settings → Devices & keys). It uploads as soon as you save.".into(),
-            },
-        );
+        show_prompt(app, Prompt::error("Recorded, but this computer isn't connected to Debrief yet, so it can't upload. Open Settings and add your server and an API key (Debrief → Settings → Devices & keys). It uploads as soon as you save."));
     }
     *st.current_id.lock().unwrap() = None;
     log::info!("Stopped {} after {} ({why})", local.id, fmt_elapsed(a.started.elapsed()));
@@ -171,7 +183,7 @@ fn watch(app: AppHandle) {
             }
             if let Some(t) = stop {
                 stop_recording(&app, &format!("{t} let go of the microphone"));
-                show_prompt(&app, Prompt { kind: "stopped", app: t.clone(), message: format!("{t} has finished with the microphone. The recording is going to Debrief.") });
+                show_prompt(&app, Prompt { kind: "stopped", app: t.clone(), message: format!("{t} has finished with the microphone. The recording is going to Debrief."), app_id: String::new() });
                 continue;
             }
             if st.active.lock().unwrap().is_some() {
@@ -188,17 +200,17 @@ fn watch(app: AppHandle) {
                 match s.action_for(&u.name, &u.id) {
                     Action::Ignore => {}
                     Action::Record => {
-                        if let Err(e) = start_recording(&app, Some(u.name.clone()), None) {
+                        if let Err(e) = start_recording(&app, Some(u.clone()), None) {
                             log::error!("Couldn't start recording: {e:#}");
                             st.snoozed.lock().unwrap().insert(u.name.clone());
-                            show_prompt(&app, Prompt { kind: "error", app: u.name.clone(), message: format!("Couldn't start recording: {e}") });
+                            show_prompt(&app, Prompt { kind: "error", app: u.name.clone(), message: format!("Couldn't start recording: {e}"), app_id: String::new() });
                         }
                         break;
                     }
                     Action::Ask => {
                         let showing = st.prompt.lock().unwrap().as_ref().map(|p| p.kind == "start" && p.app == u.name).unwrap_or(false);
                         if !showing {
-                            show_prompt(&app, Prompt { kind: "start", app: u.name.clone(), message: format!("{} is using your microphone.", u.name) });
+                            show_prompt(&app, Prompt { kind: "start", app: u.name.clone(), message: format!("{} is using your microphone.", u.name), app_id: u.id.clone() });
                         }
                         break;
                     }
@@ -324,7 +336,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 if app.state::<State>().active.lock().unwrap().is_some() {
                     stop_recording(app, "stopped from the menu");
                 } else if let Err(err) = start_recording(app, None, None) {
-                    show_prompt(app, Prompt { kind: "error", app: String::new(), message: format!("Couldn't start recording: {err}") });
+                    show_prompt(app, Prompt::error(format!("Couldn't start recording: {err}")));
                 }
             }
             "open" => {
@@ -597,7 +609,7 @@ fn answer_prompt(app: AppHandle, answer: String, title: Option<String>) -> Resul
             if answer == "always" {
                 remember(Action::Record);
             }
-            start_recording(&app, Some(p.app.clone()), title).map_err(|e| e.to_string())?;
+            start_recording(&app, Some(detect::MicUser { name: p.app.clone(), id: p.app_id.clone() }), title).map_err(|e| e.to_string())?;
         }
         "never" => {
             remember(Action::Ignore);
