@@ -44,9 +44,9 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   const busy = m.recording.status === "pending" || m.recording.status === "processing";
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col lg:h-full">
       <AutoRefresh active={busy} />
-      <div className="relative">
+      <div className="relative shrink-0">
         <div className="glow-top pointer-events-none absolute inset-x-0 -top-10 h-64" />
         <header className="relative px-4 pt-5 pb-5 md:px-8 md:pt-6">
           <Link href="/meetings" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -61,7 +61,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
                 {busy && <StatusBadge status={m.recording.status} progress={m.recording.progress} />}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <a href={`/api/meetings/${m.transcript.id}/export?format=md`} className="btn btn-secondary btn-sm">
                 <Download /> Markdown
               </a>
@@ -69,13 +69,16 @@ export default async function MeetingPage({ params, searchParams }: Props) {
                 Text
               </a>
               {slackConfigured() && <SlackButton transcriptId={m.transcript.id} sentAt={m.transcript.notifiedAt?.toISOString() ?? null} />}
+              {!busy && <RetryButton recordingId={m.recording.id} ghost />}
+              <DeleteButton recordingId={m.recording.id} title={m.displayTitle} then="/meetings" compact />
             </div>
           </div>
         </header>
       </div>
 
-      <div className="grid flex-1 gap-5 px-4 pb-8 md:px-8 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <div className="space-y-5 lg:order-1">
+      {/* On a wide screen the page fits the window: the side panels and the transcript each scroll on their own. */}
+      <div className="grid flex-1 gap-5 px-4 pb-8 md:px-8 lg:min-h-0 lg:grid-cols-[22rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pb-6">
+        <div className="space-y-5 lg:order-1 lg:-mr-2 lg:overflow-y-auto lg:pr-2">
           <section className="card space-y-4 p-4">
             {m.event ? (
               <div>
@@ -143,14 +146,10 @@ export default async function MeetingPage({ params, searchParams }: Props) {
               {m.recording.device ? `${m.recording.device} · ` : ""}
               {m.transcript.modelVersion ?? "whisper"} · {m.transcript.language ?? "en"}
             </p>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {!busy && <RetryButton recordingId={m.recording.id} />}
-              <DeleteButton recordingId={m.recording.id} title={m.displayTitle} then="/meetings" />
-            </div>
           </section>
         </div>
 
-        <div className="lg:sticky lg:top-4 lg:order-2 lg:h-[calc(100dvh-2rem)] lg:self-start">
+        <div className="grid h-[75dvh] min-h-96 lg:order-2 lg:h-auto lg:min-h-0">
           <MeetingPlayer
             recordingId={m.recording.id}
             segments={segments}
