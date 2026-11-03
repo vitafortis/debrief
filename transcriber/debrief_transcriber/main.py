@@ -22,6 +22,7 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
+from . import screens
 from .config import Config, database_url
 from .files import Found, device_for, local_tz, meeting_name, read_sidecar, recorded_at, walk_audio
 from .transcribe import Transcriber
@@ -236,6 +237,11 @@ class Worker:
                        where id = %s""",
                     (round(result.duration), Jsonb(result.peaks), rec_id),
                 )
+            # Before telling calendar-sync, so the summary can use what was on screen.
+            try:
+                screens.store(self.conn, rec_id, rel, self.cfg.recordings_dir)
+            except Exception as err:  # noqa: BLE001
+                log.warning("Couldn't read the shared screens of %s: %s", rel, err)
             # calendar-sync listens: it links the transcript to its meeting, summarizes and archives it.
             self.conn.execute("select pg_notify('debrief_transcribed', %s)", (str(tid),))
             try:

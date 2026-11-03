@@ -16,6 +16,9 @@ import { recordingsDir } from "./storage";
 
 export const AUDIO_TYPES = ["opus", "ogg", "m4a", "mp4", "wav", "flac", "mp3", "webm"] as const;
 export const MAX_CHUNK = 32 * 1024 * 1024;
+export const MAX_SCREEN = 8 * 1024 * 1024;
+/** Shared screens sit beside the audio: <folder>/screens/<ms>.jpg. */
+export const SCREENS_DIR = "screens";
 
 export const uploadStart = z.object({
   device: z.string().trim().min(1).max(80),
@@ -163,6 +166,26 @@ export function appendUpload(db: Db, id: string, offset: number, body: ReadableS
     await db.update(uploads).set({ bytes: end, updatedAt: new Date() }).where(eq(uploads.id, id));
     return { offset: end };
   });
+}
+
+/**
+ * Saves one shared screen the recorder kept, a JPEG `ms` milliseconds into
+ * the recording. Sending it again replaces it. They're read once the
+ * recording is transcribed, so the recorder sends them before finishing.
+ */
+export async function saveScreen(db: Db, id: string, ms: number, body: Uint8Array, root = recordingsDir()) {
+  const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
+  if (!u) throw new UploadError("No such upload. Start it first.", 404);
+  if (u.status === "deleted") throw new UploadError("This upload is finished.", 409);
+  if (!Number.isSafeInteger(ms) || ms < 0 || ms > 24 * 3600_000) throw new UploadError("The time must be milliseconds into the recording.", 400);
+  if (body.length > MAX_SCREEN) throw new UploadError(`Send at most ${MAX_SCREEN} bytes.`, 413);
+  if (body.length < 4 || body[0] !== 0xff || body[1] !== 0xd8) throw new UploadError("Send a JPEG.", 415);
+  const dir = resolveInRoot(root, path.join(u.folder, SCREENS_DIR));
+  await fs.promises.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
+  const file = path.join(dir, `${String(ms).padStart(9, "0")}.jpg`);
+  await fs.promises.writeFile(/*turbopackIgnore: true*/ `${file}.part`, body);
+  await fs.promises.rename(/*turbopackIgnore: true*/ `${file}.part`, file);
+  return { saved: path.basename(file) };
 }
 
 /** Queues a finished upload for the transcriber (once; finishing again changes nothing). */

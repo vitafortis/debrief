@@ -47,6 +47,7 @@ export function meetingMarkdown(m: Meeting) {
           "",
         ]
       : []),
+    ...(m.screens.length ? ["## Shared screens", "", ...m.screens.flatMap((s) => [`\`${clock(s.atSecs)}\``, "", s.text.trim(), ""])] : []),
     "## Transcript",
     "",
     ...(segs.length ? segs.map((s) => `**${speakerName(m.transcript.speakerNames, s.speaker)}** \`${clock(s.start)}\` ${s.text.trim()}\n`) : [m.transcript.content]),

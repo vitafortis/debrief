@@ -36,6 +36,13 @@
       "when": 1793633167580,
       "tag": "0004_service_status",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793669853964,
+      "tag": "0005_sleepy_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

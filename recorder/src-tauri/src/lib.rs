@@ -5,6 +5,7 @@
 pub mod audio;
 pub mod detect;
 mod icons;
+pub mod screens;
 pub mod settings;
 pub mod store;
 pub mod update;
@@ -22,6 +23,8 @@ use uuid::Uuid;
 
 struct Active {
     rec: audio::Recording,
+    /// Watching the meeting app's window for shared screens.
+    screens: Option<screens::Watcher>,
     local: store::Local,
     started: Instant,
     /// The app whose microphone use started it; it stops when that app lets go.
@@ -96,6 +99,7 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
         Some(u) if s.only_meeting_app && !u.id.is_empty() => audio::CallAudio::App { name: u.name.clone(), id: u.id.clone() },
         _ => audio::CallAudio::Everything,
     };
+    let app_user = trigger.clone().filter(|u| !u.id.is_empty());
     let trigger = trigger.map(|u| u.name);
     let local = store::Local::new(trigger.clone(), title.filter(|t| !t.trim().is_empty()));
     std::fs::create_dir_all(local.dir(&root))?;
@@ -111,8 +115,10 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
         log::warn!("{w}");
     }
     log::info!("Recording {} ({})", local.id, trigger.as_deref().unwrap_or("by hand"));
+    let started = Instant::now();
+    let screens = app_user.filter(|_| s.capture_screens).map(|u| screens::Watcher::start(local.dir(&root), u.name, u.id, started));
     *st.current_id.lock().unwrap() = Some(local.id);
-    *active = Some(Active { rec, local, started: Instant::now(), trigger, last_seen: Instant::now() });
+    *active = Some(Active { rec, screens, local, started, trigger, last_seen: Instant::now() });
     drop(active);
     refresh_tray(app);
     Ok(())
@@ -120,7 +126,8 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
 
 fn stop_recording(app: &AppHandle, why: &str) {
     let st = app.state::<State>();
-    let Some(a) = st.active.lock().unwrap().take() else { return };
+    let Some(mut a) = st.active.lock().unwrap().take() else { return };
+    drop(a.screens.take());
     let root = st.recordings.read().unwrap().clone();
     let mut local = a.local;
     let s = st.settings.read().unwrap().clone();

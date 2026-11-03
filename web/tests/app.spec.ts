@@ -104,6 +104,20 @@ test.describe("signed in", () => {
     expect(md).toContain("# lumen roadmap");
     expect(md).toContain("**Jules Moreau** `0:04`");
     expect(md).toContain("- [x] Fix the Stripe webhook");
+    expect(md).toContain("## Shared screens\n\n`4:12`\n\nlumen · Next release");
+  });
+
+  test("a meeting's shared screens: the picture, its text, and a jump to that moment", async ({ page }) => {
+    await page.goto("/meetings");
+    await page.getByRole("link", { name: /lumen roadmap/ }).click();
+    await page.getByRole("tab", { name: /Shared screens/ }).click();
+    const shot = page.getByRole("img", { name: "Screen at 4:12" });
+    await expect(shot).toBeVisible();
+    expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1280);
+    await page.getByText("Text on this screen").click();
+    await expect(page.getByText("Reusable finding blocks and severity tables")).toBeVisible();
+    await page.getByRole("tab", { name: "Transcript" }).click();
+    await expect(page.getByText("Every pentester we talked to asked for it.")).toBeVisible();
   });
 
   test("tasks: edit, approve, dismiss and restore", async ({ page }) => {

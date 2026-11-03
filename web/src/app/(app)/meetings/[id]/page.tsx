@@ -158,6 +158,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
             waveform={m.recording.waveform}
             initialTime={sp.t ? Number(sp.t) || 0 : undefined}
             initialQuery={sp.q}
+            screens={m.screens}
           />
         </div>
       </div>

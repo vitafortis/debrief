@@ -2,7 +2,7 @@ const { invoke } = window.__TAURI__.core;
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["server_url", "fallback_url", "api_key", "device_name", "recordings_dir"];
 const NUMS = ["stop_after_secs", "keep_local_days"];
-const BOOLS = ["detect_meetings", "capture_system_audio", "only_meeting_app", "launch_at_login"];
+const BOOLS = ["detect_meetings", "capture_system_audio", "only_meeting_app", "capture_screens", "launch_at_login"];
 const ACTIONS = [
   ["ask", "Ask"],
   ["record", "Always record"],
