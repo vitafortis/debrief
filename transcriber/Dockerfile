@@ -5,8 +5,9 @@ LABEL org.opencontainers.image.source=https://github.com/vitafortis/debrief
 ARG DIARIZE=true
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     MODEL_DIR=/models HF_HOME=/models/hf
-# tzdata for TZ. No ffmpeg: faster-whisper decodes with PyAV's own copy, and pyannote is handed that audio.
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+# tzdata for TZ; Tesseract reads the text on shared screens. No ffmpeg: faster-whisper decodes with
+# PyAV's own copy, and pyannote is handed that audio.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata tesseract-ocr && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pyproject.toml ./
 COPY debrief_transcriber ./debrief_transcriber

@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -54,8 +54,13 @@ struct Offset {
     error: Option<String>,
 }
 
+/// This build's version, set at startup. It goes in the user agent, so Settings → Recorder & devices shows what each key's recorder runs.
+pub static VERSION: OnceLock<String> = OnceLock::new();
+
 fn agent() -> ureq::Agent {
+    let version = VERSION.get().map_or(env!("CARGO_PKG_VERSION"), String::as_str);
     ureq::Agent::config_builder()
+        .user_agent(format!("DebriefRecorder/{version} ({})", std::env::consts::OS))
         .http_status_as_error(false)
         .timeout_connect(Some(Duration::from_secs(10)))
         .timeout_global(Some(Duration::from_secs(120)))
@@ -144,6 +149,29 @@ impl Client<'_> {
         }
     }
 
+    /// Sends one shared screen; whether Debrief took it, skipped it, or doesn't take them.
+    fn screen(&self, l: &Local, ms: u64, file: &Path) -> Result<Sent> {
+        let body = std::fs::read(file)?;
+        let mut res = self
+            .agent
+            .put(&self.url(l.id, &format!("/screens/{ms}")))
+            .header("Authorization", &self.auth())
+            .header("Content-Type", "image/jpeg")
+            .send(&body[..])?;
+        let status = res.status().as_u16();
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
+        match status {
+            200 => Ok(Sent::Taken),
+            // An older Debrief, or a recording it has finished with or deleted.
+            404 | 405 | 409 => Ok(Sent::NotTaken),
+            400 | 413 | 415 => {
+                log::warn!("Debrief refused screen {ms} of {}: {}", l.id, o.error.unwrap_or_default());
+                Ok(Sent::Skipped)
+            }
+            s => Err(anyhow!("{s}: {}", o.error.unwrap_or_default())),
+        }
+    }
+
     fn complete(&self, l: &Local, bytes: u64) -> Result<()> {
         let body = serde_json::json!({ "bytes": bytes, "durationSecs": l.duration_secs.unwrap_or(0.0), "title": l.title });
         let mut res = self.agent.post(&self.url(l.id, "/complete")).header("Authorization", &self.auth()).send_json(&body)?;
@@ -154,6 +182,30 @@ impl Client<'_> {
         }
         Ok(())
     }
+}
+
+enum Sent {
+    Taken,
+    Skipped,
+    NotTaken,
+}
+
+/// Sends the shared screens saved since last time, in order.
+fn push_screens(c: &Client, root: &Path, l: &mut Local) -> Result<()> {
+    if l.screens_off {
+        return Ok(());
+    }
+    for (ms, path) in crate::screens::list(&l.dir(root)).into_iter().skip(l.screens_sent) {
+        match c.screen(l, ms, &path)? {
+            Sent::Taken | Sent::Skipped => l.screens_sent += 1,
+            Sent::NotTaken => l.screens_off = true,
+        }
+        l.save(root)?;
+        if l.screens_off {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Moves one recording as far along as it can go. Returns whether it's finished.
@@ -187,6 +239,8 @@ fn push_one(c: &Client, root: &Path, l: &mut Local, device: &str, live: bool) ->
             return Err(anyhow!("the server didn't take any of the chunk"));
         }
     }
+    // Before completing, so they're there when the transcriber reads the recording.
+    push_screens(c, root, l)?;
     if l.ended_at.is_some() && !live {
         c.complete(l, size)?;
         l.done_at = Some(chrono::Utc::now());

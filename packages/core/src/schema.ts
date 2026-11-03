@@ -148,6 +148,25 @@ export const transcripts = pgTable(
   (t) => [index("idx_transcripts_search").using("gin", t.searchVector)]
 );
 
+/**
+ * What was presented in the meeting app's window: the recorder keeps frames
+ * that hold still, and the transcriber stores the ones with text, read by OCR.
+ */
+export const screens = pgTable(
+  "screens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recordingId: uuid("recording_id")
+      .notNull()
+      .references(() => recordings.id, { onDelete: "cascade" }),
+    atSecs: real("at_secs").notNull(), // when in the recording
+    filePath: text("file_path").notNull(), // the JPEG, relative to the server's recordings volume
+    text: text("text").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("screens_recording").on(t.recordingId, t.atSecs)]
+);
+
 /** Which calendar event a transcript belongs to, scored by time overlap. */
 export const transcriptEvents = pgTable(
   "transcript_events",
@@ -222,6 +241,7 @@ export const apiKeys = pgTable("api_keys", {
   prefix: text("prefix").notNull(), // the first characters, to tell keys apart
   hash: text("hash").notNull().unique(),
   lastUsedAt: ts("last_used_at"),
+  recorder: text("recorder"), // "0.1.15 on macOS": the recorder that last used it, from its user agent
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 

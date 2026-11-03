@@ -18,7 +18,7 @@ export default async function DevicesSettings() {
       <RecorderDownload publicUrl={url} />
       <ApiKeys
         publicUrl={url}
-        keys={keys.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, created: fmtAgo(k.createdAt), lastUsed: k.lastUsedAt ? fmtAgo(k.lastUsedAt) : null }))}
+        keys={keys.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, created: fmtAgo(k.createdAt), lastUsed: k.lastUsedAt ? fmtAgo(k.lastUsedAt) : null, recorder: k.recorder }))}
       />
       <DeviceSettings contexts={contexts} devices={devs.map((x) => ({ ...x, lastActive: x.lastActive ? fmtAgo(x.lastActive) : null }))} />
     </div>

@@ -6,6 +6,7 @@ import {
   devices,
   eventAttendees,
   recordings,
+  screens,
   tasks,
   transcriptEvents,
   transcripts,
@@ -164,6 +165,11 @@ export async function getMeeting(db: Db, transcriptId: string) {
 
   const [device] = row.recording.device ? await db.select().from(devices).where(eq(devices.name, row.recording.device)) : [];
   const taskRows = await db.select().from(tasks).where(eq(tasks.transcriptId, transcriptId)).orderBy(asc(tasks.itemNumber));
+  const screenRows = await db
+    .select({ id: screens.id, atSecs: screens.atSecs, text: screens.text })
+    .from(screens)
+    .where(eq(screens.recordingId, row.recording.id))
+    .orderBy(asc(screens.atSecs));
   const event = events[0] ?? null;
   return {
     ...row,
@@ -171,6 +177,8 @@ export async function getMeeting(db: Db, transcriptId: string) {
     events,
     attendees: event ? attendees.filter((a) => a.eventId === event.id) : [],
     tasks: taskRows,
+    /** What was presented on screen, with the text read from it. */
+    screens: screenRows,
     context: event?.context ?? device?.context ?? null,
     /** Where this meeting's tasks go unless chosen per task. */
     defaultDestination: event?.defaultDestination ?? device?.defaultDestination ?? "akiflow",

@@ -8,7 +8,7 @@ import { createKey, deleteKey, updateDevice } from "@/actions/settings";
 import { useAction } from "@/components/task-item";
 import { DEVICE_SWATCH, DeviceBadge } from "@/components/device-badge";
 
-type Key = { id: string; name: string; prefix: string; created: string; lastUsed: string | null };
+type Key = { id: string; name: string; prefix: string; created: string; lastUsed: string | null; recorder: string | null };
 
 /** Keys for the desktop recorder and for Claude. Each is shown once, when it's made. */
 export function ApiKeys({ keys, publicUrl }: { keys: Key[]; publicUrl: string }) {
@@ -84,6 +84,7 @@ export function ApiKeys({ keys, publicUrl }: { keys: Key[]; publicUrl: string })
                 <p className="font-mono text-[0.6875rem] text-muted-foreground">
                   {k.prefix}… · made {k.created} · {k.lastUsed ? `used ${k.lastUsed}` : "never used"}
                 </p>
+                {k.recorder && <p className="text-[0.6875rem] text-muted-foreground">Recorder {k.recorder}</p>}
               </div>
               <button
                 className="btn btn-ghost btn-icon btn-sm"

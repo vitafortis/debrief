@@ -47,6 +47,8 @@ pub struct Settings {
     pub capture_system_audio: bool,
     /// When a meeting app started the recording, only record that app's sound.
     pub only_meeting_app: bool,
+    /// Save what's presented in the meeting app's window, for Debrief to read the text from.
+    pub capture_screens: bool,
 
     /// Where recordings are written before (and after) upload.
     pub recordings_dir: String,
@@ -77,6 +79,7 @@ impl Default for Settings {
             microphone: String::new(),
             capture_system_audio: true,
             only_meeting_app: true,
+            capture_screens: true,
             recordings_dir: String::new(),
             keep_local_days: 14,
             launch_at_login: true,

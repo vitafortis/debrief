@@ -7,7 +7,7 @@ export const json = (data: unknown, status = 200) => Response.json(data, { statu
 
 /** The API key on a request (Authorization: Bearer dbk_…), or a 401 to send back. */
 export async function apiKey(req: Request) {
-  const key = await verifyApiKey(db(), bearer(req.headers.get("authorization")));
+  const key = await verifyApiKey(db(), bearer(req.headers.get("authorization")), req.headers.get("user-agent"));
   return key ?? json({ error: "Missing or unknown API key. Make one in Debrief → Settings → API keys." }, 401);
 }
 

@@ -108,6 +108,12 @@ test("an API key works until it's deleted, and only its hash is kept", { skip },
   assert.match(k.key, /^dbk_/);
   assert.equal((await core!.verifyApiKey(db, k.key))?.name, "Work MacBook");
   assert.equal(await core!.verifyApiKey(db, k.key + "x"), null);
+  const recorder = async () => (await core!.listApiKeys(db)).find((r) => r.id === k.id)?.recorder;
+  assert.equal(await recorder(), null);
+  await core!.verifyApiKey(db, k.key, "DebriefRecorder/0.1.15 (macos)");
+  assert.equal(await recorder(), "0.1.15 on macOS");
+  await core!.verifyApiKey(db, k.key, "claude-code/2.1");
+  assert.equal(await recorder(), "0.1.15 on macOS");
   const rows = await db.execute(sql`select hash from api_keys where id = ${k.id}`);
   assert.notEqual(rows.rows[0].hash, k.key);
   await core!.deleteApiKey(db, k.id);
@@ -374,11 +380,21 @@ test("deleting a recording removes its audio, archive copy, exports and transcri
     const id = "3b8f1c2a-0000-4000-8000-000000000003";
     await up.startUpload(db, id, { device: "laptop", startedAt: "2026-10-23T15:00:00Z", format: "opus" }, null, local);
     await up.appendUpload(db, id, 0, Readable.from([Buffer.from("secret")]), 6, local);
+    // A shared screen: a JPEG, saved beside the audio by its time; anything else is refused.
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    assert.deepEqual(await up.saveScreen(db, id, 12_500, jpeg, local), { saved: "000012500.jpg" });
+    await assert.rejects(up.saveScreen(db, id, 13_000, new Uint8Array([1, 2, 3, 4]), local), (e: InstanceType<typeof up.UploadError>) => e.status === 415);
+    await assert.rejects(up.saveScreen(db, "3b8f1c2a-0000-4000-8000-0000000000ff", 1, jpeg, local), (e: InstanceType<typeof up.UploadError>) => e.status === 404);
     await up.finishUpload(db, id, { bytes: 6, durationSecs: 30 }, local);
     const [u] = await db.select().from(core!.uploads).where(sql`id = ${id}`);
     const rel = `${u.folder}/audio.opus`;
+    assert.ok(fs.existsSync(path.join(local, u.folder, "screens", "000012500.jpg")));
     const [rec] = await db.select().from(core!.recordings).where(sql`file_path = ${rel}`);
-    await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Something sensitive." });
+    const [tr] = await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Something sensitive." }).returning();
+    await db.insert(core!.screens).values({ recordingId: rec.id, atSecs: 12.5, filePath: `${u.folder}/screens/000012500.jpg`, text: "Launch checklist: pricing page, docs" });
+    const m = (await core!.getMeeting(db, tr.id))!;
+    assert.deepEqual(m.screens.map((x) => [x.atSecs, x.text]), [[12.5, "Launch checklist: pricing page, docs"]]);
+    assert.match(core!.meetingBrief(m), /Text on screens shared[\s\S]*\[0:12\]\nLaunch checklist/);
     // An archive copy with its sidecar, and the exports.
     fs.mkdirSync(path.join(nas, u.folder), { recursive: true });
     fs.writeFileSync(path.join(nas, rel), "secret");
@@ -389,6 +405,7 @@ test("deleting a recording removes its audio, archive copy, exports and transcri
     assert.equal(await st.deleteRecording(db, rec.id), true);
     assert.equal((await db.select().from(core!.recordings).where(sql`id = ${rec.id}`)).length, 0);
     assert.equal((await db.select().from(core!.transcripts).where(sql`recording_id = ${rec.id}`)).length, 0);
+    assert.equal((await db.select().from(core!.screens).where(sql`recording_id = ${rec.id}`)).length, 0);
     assert.ok(!fs.existsSync(path.join(local, "laptop")));
     assert.ok(!fs.existsSync(path.join(nas, "laptop")));
     assert.deepEqual(fs.readdirSync(path.join(out, "2026-10-23")), ["other-12345678.txt"]);
