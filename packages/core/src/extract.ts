@@ -32,7 +32,20 @@ export function transcriptText(m: Pick<Meeting, "transcript">) {
   return segs.map((s) => `[${clock(s.start)}] ${speakerName(m.transcript.speakerNames, s.speaker)}: ${s.text.trim()}`).join("\n");
 }
 
-/** Everything a model needs to read a meeting: when, who, which calendar, and what was said. */
+/** The text read from what was shown on screen, by time, cut to about `max` characters. */
+export function screensText(m: Pick<Meeting, "screens">, max = 12_000) {
+  const out: string[] = [];
+  let used = 0;
+  for (const s of m.screens) {
+    const line = `[${clock(s.atSecs)}]\n${s.text.trim()}`;
+    if (used + line.length > max) break;
+    out.push(line);
+    used += line.length;
+  }
+  return out.join("\n\n");
+}
+
+/** Everything a model needs to read a meeting: when, who, which calendar, what was said, and what was shown. */
 export function meetingBrief(m: Meeting) {
   const lines = [
     `Meeting: ${m.displayTitle}`,
@@ -42,6 +55,7 @@ export function meetingBrief(m: Meeting) {
     m.attendees.length ? `Attendees: ${m.attendees.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(", ")}` : null,
     "",
     transcriptText(m),
+    ...(m.screens.length ? ["", "Text on screens shared during the meeting (read by OCR, so expect some errors):", "", screensText(m)] : []),
   ];
   return lines.filter((l) => l !== null).join("\n");
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, Rewind, FastForward, Search, X, LocateFixed } from "lucide-react";
+import { Pause, Play, Rewind, FastForward, Search, X, LocateFixed, Monitor } from "lucide-react";
 import type WaveSurfer from "wavesurfer.js";
 import type { SpeakerSegment } from "@debrief/core/schema";
 import { clock, speakerLabel } from "@/lib/time";
@@ -23,10 +23,40 @@ function Marked({ text, terms }: { text: string; terms: string[] }) {
   );
 }
 
+export type ScreenView = { id: string; atSecs: number; text: string };
+
+/** What was shown on screen, by time: the picture, the text read from it, and a jump to that moment. */
+function Screens({ screens, terms, seek }: { screens: ScreenView[]; terms: string[]; seek: (t: number) => void }) {
+  return (
+    <div className="space-y-4 p-4">
+      {screens.map((s) => (
+        <figure key={s.id} className="overflow-hidden rounded-lg border border-border">
+          <a href={`/api/screens/${s.id}`} target="_blank" rel="noreferrer" title="Open full size">
+            {/* eslint-disable-next-line @next/next/no-img-element -- served from our own API, sized by the browser */}
+            <img src={`/api/screens/${s.id}`} alt={`Screen at ${clock(s.atSecs)}`} loading="lazy" className="w-full bg-muted" />
+          </a>
+          <figcaption className="space-y-1.5 border-t border-border p-3">
+            <button className="font-mono text-[0.6875rem] text-primary tabular-nums hover:underline" onClick={() => seek(s.atSecs)}>
+              {clock(s.atSecs)}
+            </button>
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Text on this screen</summary>
+              <p className="mt-1.5 text-xs leading-relaxed whitespace-pre-line">
+                <Marked text={s.text} terms={terms} />
+              </p>
+            </details>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The audio player and the transcript beside it: the line being spoken is
  * highlighted and kept in view, clicking a line seeks there, and the find box
- * marks and steps through matches.
+ * marks and steps through matches. Shared screens, when there are any, are a
+ * second tab.
  */
 export function MeetingPlayer({
   recordingId,
@@ -36,6 +66,7 @@ export function MeetingPlayer({
   waveform,
   initialTime,
   initialQuery,
+  screens = [],
 }: {
   recordingId: string;
   segments: SpeakerSegment[];
@@ -44,7 +75,9 @@ export function MeetingPlayer({
   waveform: number[] | null;
   initialTime?: number;
   initialQuery?: string;
+  screens?: ScreenView[];
 }) {
+  const [tab, setTab] = useState<"transcript" | "screens">("transcript");
   const waveRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
@@ -255,7 +288,34 @@ export function MeetingPlayer({
         </div>
       </div>
 
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-2" onWheel={() => playing && setFollow(false)}>
+      {screens.length > 0 && (
+        <div className="flex gap-1 border-b border-border px-3 pt-2" role="tablist">
+          {(
+            [
+              ["transcript", "Transcript", null],
+              ["screens", "Shared screens", screens.length],
+            ] as const
+          ).map(([key, label, n]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 pb-2 text-xs font-medium ${tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              {key === "screens" && <Monitor className="size-3.5" />}
+              {label}
+              {n !== null && <span className="text-muted-foreground tabular-nums">{n}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === "screens" && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Screens screens={screens} terms={terms} seek={seek} />
+        </div>
+      )}
+      <div ref={listRef} hidden={tab !== "transcript"} className="min-h-0 flex-1 overflow-y-auto py-2" onWheel={() => playing && setFollow(false)}>
         {segments.length === 0 && <p className="px-4 py-10 text-center text-sm text-muted-foreground">No speech was found in this recording.</p>}
         {segments.map((s, i) => {
           const prev = segments[i - 1];

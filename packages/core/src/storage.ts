@@ -277,9 +277,16 @@ async function removeExports(id: string, recordedAt: Date) {
   }
 }
 
+/** The shared screens beside a recording on the server (they aren't archived). */
+async function removeScreens(root: string, rel: string) {
+  const dir = inRoot(root, path.posix.join(path.posix.dirname(rel), "screens"));
+  await fs.promises.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
+  await removeEmptyDirs(path.dirname(dir), root);
+}
+
 /**
  * Deletes a recording everywhere Debrief keeps it: the audio on the server,
- * in the NAS folder and in S3, the exported transcript and notes, then the
+ * in the NAS folder and in S3, its shared screens, the exported transcript and notes, then the
  * recording with its transcript, summary and action items. The files go
  * first, so a watched NAS folder can't bring it back; if one can't be
  * deleted, nothing else is.
@@ -287,6 +294,7 @@ async function removeExports(id: string, recordedAt: Date) {
 export async function deleteRecording(db: Db, id: string) {
   const [r] = await db.select().from(recordings).where(eq(recordings.id, id));
   if (!r) return false;
+  await removeScreens(recordingsDir(), r.filePath);
   await removeFile(recordingsDir(), r.filePath);
   const folder = folderDir();
   if (folder) await removeFile(folder, r.filePath);

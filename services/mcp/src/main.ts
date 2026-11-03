@@ -184,7 +184,7 @@ function build() {
     "get_meeting_context",
     {
       title: "Get meeting context",
-      description: "One meeting's calendar event, attendees, summary and tasks, plus its transcript.",
+      description: "One meeting's calendar event, attendees, summary and tasks, the text on screens shared in it, plus its transcript.",
       inputSchema: { id: z.string().describe("Meeting (transcript) id"), include_transcript: z.boolean().optional().describe("Default true") },
       annotations: { readOnlyHint: true },
     },
@@ -203,6 +203,7 @@ function build() {
         attendees: m.attendees.map((a) => ({ name: a.name, email: a.email, rsvp: a.rsvpStatus })),
         summary: m.transcript.summary,
         tasks: m.tasks.map((t) => ({ id: t.id, description: t.description, assignee: t.assignee, dueDate: t.dueDate, status: t.status, destination: t.destination })),
+        sharedScreens: m.screens.map((s) => ({ atSecs: s.atSecs, text: s.text })),
         transcript: include_transcript === false ? undefined : transcriptText(m),
       });
     })

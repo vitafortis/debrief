@@ -247,7 +247,7 @@ Each calendar has a default destination (Settings → Calendars → *Tasks go to
    - **This computer's name:** how it shows up in Debrief (defaults to the computer's name).
    - **Test connection**, then **Save**.
 4. Allow the permissions it asks for the first time it records:
-   - **Mac:** *Microphone*, and *System Audio Recording* (System Settings → Privacy & Security → Screen & System Audio Recording → Debrief Recorder). Without the second, only your side of the call is recorded; the recorder warns you if that happens.
+   - **Mac:** *Microphone*, and *Screen & System Audio Recording* (System Settings → Privacy & Security → Screen & System Audio Recording → Debrief Recorder). Without it, only your side of the call is recorded (the recorder warns you if that happens) and shared screens aren't kept.
    - **Windows:** microphone access for desktop apps (Settings → Privacy & security → Microphone).
 5. **Record a test call.** Join any call, answer **Record** in the popup, and hang up. A minute or two later it's on the dashboard: *Queued*, then *Transcribing*, then *Ready*. The first one takes a few minutes longer while the Whisper model (about 3 GB) downloads.
 
@@ -336,6 +336,8 @@ Open one from the dashboard, **Meetings** or the **Calendar**.
 - **Speakers:** with speaker labels on, the transcript says *Speaker 1*, *Speaker 2* and so on. Type names under **Speakers** and they're used everywhere: the transcript, search, exports and what Claude reads.
 - **Summary:** Claude writes one when it extracts tasks. Click it to edit, or write your own.
 
+**Shared screens:** when someone presented during a recorded call, the **Shared screens** tab beside the transcript shows each slide or document with its time (click it to play from there) and the text read from it. That text also goes into the summary, the exports and search by Claude.
+
 **Action items:** shown for this meeting. Add one by hand with **Add**.
 
 **Export:** **Markdown** downloads the summary, action items and transcript with speakers and times. **Text** is the bare transcript. With a NAS mounted, the same Markdown is saved there (`exports/<day>/<title>-<id>.notes.md`) whenever the summary changes. **Slack** posts the summary and action items (again).
@@ -414,7 +416,12 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 - A recording started for an app stops when that app has let go of the microphone for 45 seconds (adjustable). One started by hand runs until you stop it.
 - *Not now* holds until that app lets go of the microphone; the next call asks again.
 
-**What's recorded.** Your microphone on the left channel and the computer's audio (everyone else) on the right, as Opus at 48 kbit/s: about 21 MB an hour. Pick a microphone in Settings, or turn off the computer's audio.
+**What's recorded.** Your microphone on the left channel and the call on the right, as Opus at 48 kbit/s: about 21 MB an hour. Pick a microphone in Settings, or turn off the computer's audio.
+
+- **Just the meeting app** (on by default): when an app started the recording, only that app's sound is recorded, not notifications, music or videos elsewhere. A browser is recorded whole, every tab, since browsers play all their tabs through one process. Recordings started by hand record everything the computer plays. This needs macOS 14.2 or Windows 10 version 2004 or later; if the app's sound can't be captured, it records everything instead.
+- **If the microphone drops out** (a Bluetooth headset switching into call mode, a USB microphone unplugged), it's opened again within a few seconds, following the system default unless you chose a microphone. If it recorded only silence, the recorder says so when it stops.
+
+**Shared screens** (on by default). While an app's call is recorded, the recorder looks at that app's window every 3 seconds and keeps a frame when it has held still and changed from the last one kept: a slide or a document someone is presenting, not a grid of moving faces. Browsers are only looked at while the window's tab is the call (*Meet*, *Teams*, *Zoom* and so on in its title). After transcribing, Debrief reads the text on each frame with Tesseract and keeps the ones with a dozen words or more that aren't a repeat of the one before; the rest are deleted. The window has to be open (behind other windows is fine, minimized isn't). What you share yourself isn't kept. Frames stay on the server's recordings volume beside the audio and aren't archived to the NAS or S3; deleting the meeting deletes them.
 
 **Uploading.** Audio goes up about every 20 seconds while recording, so Debrief has nearly all of it when you hang up. The recording is always written to disk first. With no connection (a plane, a hotel, the server down), it keeps recording and uploads later, retrying with backoff; Settings and the menu show what's waiting and why. Uploads resume exactly where they stopped. A recording the app was quit or crashed in the middle of is uploaded as far as it got; one that never finishes uploading (the laptop died) is transcribed anyway after 12 hours (Settings → Storage).
 
@@ -508,7 +515,9 @@ Settings live in the database too, so this backs them up. Recordings are in the 
 | Archiving fails | `docker compose logs calendar-sync` says why; **Test archive** in Settings → Storage checks the settings. |
 | The recorder says "Can't reach Debrief" | **Test connection** in its Settings says why. From outside, `https://<host>/api/recorder/ping` must reach the `web` container, not a sign-in page (exempt `/api/recorder` from forward auth). |
 | The recorder says the API key is unknown | It was revoked, or mistyped. Make a new one in Settings → Recorder & devices. |
-| Only my side of the call was recorded | Mac: allow Debrief Recorder under Privacy & Security → Screen & System Audio Recording, and check *Record the computer's audio too* is on. |
+| Only my side of the call was recorded | Mac: allow Debrief Recorder under Privacy & Security → Screen & System Audio Recording, and check *Record the computer's audio too* is on. If the call was in an app the recorder doesn't capture well, turn off *Just the meeting app*. |
+| My side of the call is silent | The microphone was cut off or muted. The recorder now reopens a microphone that stops; check the one chosen in its Settings, and on a Mac that it's allowed under Privacy & Security → Microphone. |
+| No shared screens | The recorder's *Shared screens* must be on, and on a Mac it needs Screen & System Audio Recording. The call's window must be open, and for a browser the call must be the window's current tab. Frames with little text are dropped on purpose. The transcriber log says "Shared screens of …: kept N of M". |
 | The popup never appears | The recorder's Settings → *When an app uses the microphone* must be on, and the app's rule must be *Ask*. Settings lists the apps it sees using the microphone; if yours isn't there while in a call, check the app has microphone access. |
 | No Slack message | Settings → Overview shows whether Slack is set up. `docker compose logs calendar-sync` shows "sent to Slack" or Slack's error. Messages go out once a meeting has a summary. |
 | A meeting has no calendar event | Is the calendar synced (Settings → Calendars shows the last sync or an error)? Is the time zone right? A recording needs to overlap an event by 70%. Pick the event by hand on the meeting page if needed. |

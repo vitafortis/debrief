@@ -25,6 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       "",
       ...(m.transcript.summary ? ["## Summary", "", m.transcript.summary, ""] : []),
       ...(m.tasks.length ? ["## Action items", "", ...m.tasks.filter((t) => t.status !== "dismissed").map((t) => `- [${t.status === "pushed" ? "x" : " "}] ${t.description}${t.assignee ? ` (${t.assignee})` : ""}`), ""] : []),
+      ...(m.screens.length ? ["## Shared screens", "", ...m.screens.flatMap((s) => [`\`${clock(s.atSecs)}\``, "", s.text.trim(), ""])] : []),
       "## Transcript",
       "",
       ...(segs.length

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import pg from "pg";
 
@@ -15,7 +16,7 @@ export default async function setup() {
   await c.end();
   execFileSync("npx", ["tsx", "scripts/seed-demo.ts"], {
     cwd: path.resolve(import.meta.dirname, "../../packages/core"),
-    env: { ...process.env, DATABASE_URL: url.toString(), TZ: "America/New_York" },
+    env: { ...process.env, DATABASE_URL: url.toString(), TZ: "America/New_York", RECORDINGS_DIR: path.join(os.tmpdir(), "debrief-e2e-recordings") },
     stdio: "inherit",
   });
 }

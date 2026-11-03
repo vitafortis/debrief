@@ -26,6 +26,11 @@ pub struct Local {
     pub done_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub last_error: Option<String>,
+    /// Shared screens Debrief has (they go up in order), and whether it takes them at all.
+    #[serde(default)]
+    pub screens_sent: usize,
+    #[serde(default)]
+    pub screens_off: bool,
 }
 
 pub const AUDIO: &str = "audio.opus";
@@ -43,6 +48,8 @@ impl Local {
             server_started: false,
             done_at: None,
             last_error: None,
+            screens_sent: 0,
+            screens_off: false,
         }
     }
 
