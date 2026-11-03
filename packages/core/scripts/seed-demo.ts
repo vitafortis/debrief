@@ -4,10 +4,12 @@
  *
  *   DATABASE_URL=… tsx scripts/seed-demo.ts
  */
+import fs from "node:fs";
+import path from "node:path";
 import { inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../src/db";
 import { runMigrations } from "../src/migrate";
-import { calendarEvents, calendars, devices, eventAttendees, recordings, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
+import { calendarEvents, calendars, devices, eventAttendees, recordings, screens, tasks, transcriptEvents, transcripts, type SpeakerSegment } from "../src/schema";
 import { correlateTranscript } from "../src/correlate";
 import { saveSettings } from "../src/settings";
 import { reportStatus } from "../src/system";
@@ -214,6 +216,22 @@ const roadmap = await meeting({
     ["SPEAKER_01", "Let's do a demo for the beta group on the twenty-eighth."],
   ],
 });
+// Jules shared a slide; the transcriber read its text.
+{
+  const file = "win-desktop/lumen_roadmap/screens/000252000.jpg";
+  await db.insert(screens).values({
+    recordingId: roadmap!.recordingId,
+    atSecs: 252,
+    filePath: file,
+    text: "lumen · Next release\nReport template editor first\nCustom headers and footers per client\nPDF renderer rewrite (Alex)\nReusable finding blocks and severity tables\nBeta demo on the 28th\nThen: shared engagements · Pricing page draft (Jules)",
+  });
+  // The picture too, where the web app will look for it.
+  if (process.env.RECORDINGS_DIR) {
+    const dest = path.join(process.env.RECORDINGS_DIR, file);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(import.meta.dirname, "demo-screen.jpg"), dest);
+  }
+}
 
 await event(work, "Quarterly planning", at(-3, 14, 0), 90, [P.sarah, P.maria, P.dev, P.me]);
 await meeting({
