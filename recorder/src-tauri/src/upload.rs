@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -54,8 +54,13 @@ struct Offset {
     error: Option<String>,
 }
 
+/// This build's version, set at startup. It goes in the user agent, so Settings → Recorder & devices shows what each key's recorder runs.
+pub static VERSION: OnceLock<String> = OnceLock::new();
+
 fn agent() -> ureq::Agent {
+    let version = VERSION.get().map_or(env!("CARGO_PKG_VERSION"), String::as_str);
     ureq::Agent::config_builder()
+        .user_agent(format!("DebriefRecorder/{version} ({})", std::env::consts::OS))
         .http_status_as_error(false)
         .timeout_connect(Some(Duration::from_secs(10)))
         .timeout_global(Some(Duration::from_secs(120)))

@@ -427,7 +427,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 
 **Copies on the computer.** Recordings stay in the recordings folder (Settings → *On this computer*) for 14 days after they're uploaded, then they're deleted; 0 deletes them as soon as Debrief has them. The server (and its archive) keeps the original.
 
-**Updates.** The recorder looks for a newer release on GitHub a minute after it starts and then once a day. When there is one, the menu shows *Update to 0.1.12…*, which downloads the installer; install it over the old one. Settings shows the version, with **Check for updates**. It isn't signed, so it can't update itself.
+**Updates.** The recorder looks for a newer release on GitHub a minute after it starts and then once a day. When there is one, the menu shows *Update to 0.1.12…*, which downloads the installer; install it over the old one. Settings shows the version, with **Check for updates**, and Debrief's Settings → Recorder & devices shows the version each key was last used by. It isn't signed, so it can't update itself. Recorders from before 0.1.12 don't check: download the newest from Settings → Recorder & devices and install it over the old one.
 
 **Settings** are stored in `~/Library/Application Support/io.github.vitafortis.debrief.recorder/settings.json` (Mac) or `%APPDATA%\io.github.vitafortis.debrief.recorder\settings.json` (Windows), readable only by you, API key included. Logs are in `~/Library/Logs/io.github.vitafortis.debrief.recorder/` or `%LOCALAPPDATA%\io.github.vitafortis.debrief.recorder\logs\`.
 

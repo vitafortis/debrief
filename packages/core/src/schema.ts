@@ -241,6 +241,7 @@ export const apiKeys = pgTable("api_keys", {
   prefix: text("prefix").notNull(), // the first characters, to tell keys apart
   hash: text("hash").notNull().unique(),
   lastUsedAt: ts("last_used_at"),
+  recorder: text("recorder"), // "0.1.15 on macOS": the recorder that last used it, from its user agent
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 

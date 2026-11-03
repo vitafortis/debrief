@@ -108,6 +108,12 @@ test("an API key works until it's deleted, and only its hash is kept", { skip },
   assert.match(k.key, /^dbk_/);
   assert.equal((await core!.verifyApiKey(db, k.key))?.name, "Work MacBook");
   assert.equal(await core!.verifyApiKey(db, k.key + "x"), null);
+  const recorder = async () => (await core!.listApiKeys(db)).find((r) => r.id === k.id)?.recorder;
+  assert.equal(await recorder(), null);
+  await core!.verifyApiKey(db, k.key, "DebriefRecorder/0.1.15 (macos)");
+  assert.equal(await recorder(), "0.1.15 on macOS");
+  await core!.verifyApiKey(db, k.key, "claude-code/2.1");
+  assert.equal(await recorder(), "0.1.15 on macOS");
   const rows = await db.execute(sql`select hash from api_keys where id = ${k.id}`);
   assert.notEqual(rows.rows[0].hash, k.key);
   await core!.deleteApiKey(db, k.id);

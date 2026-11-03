@@ -662,6 +662,7 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            let _ = upload::VERSION.set(app.package_info().version.to_string());
 
             let config_dir = app.path().app_config_dir()?;
             let settings_path = config_dir.join("settings.json");

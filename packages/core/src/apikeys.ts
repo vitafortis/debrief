@@ -17,7 +17,7 @@ export async function createApiKey(db: Db, name: string) {
 
 export async function listApiKeys(db: Db) {
   return db
-    .select({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.prefix, lastUsedAt: apiKeys.lastUsedAt, createdAt: apiKeys.createdAt })
+    .select({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.prefix, lastUsedAt: apiKeys.lastUsedAt, recorder: apiKeys.recorder, createdAt: apiKeys.createdAt })
     .from(apiKeys)
     .orderBy(desc(apiKeys.createdAt));
 }
@@ -26,13 +26,29 @@ export async function deleteApiKey(db: Db, id: string) {
   await db.delete(apiKeys).where(eq(apiKeys.id, id));
 }
 
-/** The key a bearer token belongs to, or null. Marks it used (at most once a minute). */
-export async function verifyApiKey(db: Db, token: string | null | undefined) {
+const OS: Record<string, string> = { macos: "macOS", windows: "Windows", linux: "Linux" };
+
+/** "0.1.15 on macOS" from the recorder's user agent ("DebriefRecorder/0.1.15 (macos)"), or null for anything else. */
+export function recorderVersion(userAgent: string | null | undefined) {
+  const m = /DebriefRecorder\/([\w.+-]+)(?: \((\w+)\))?/.exec(userAgent ?? "");
+  if (!m) return null;
+  return m[2] ? `${m[1]} on ${OS[m[2]] ?? m[2]}` : m[1];
+}
+
+/**
+ * The key a bearer token belongs to, or null. Marks it used (at most once a
+ * minute), and notes which recorder version used it when `userAgent` is one.
+ */
+export async function verifyApiKey(db: Db, token: string | null | undefined, userAgent?: string | null) {
   if (!token?.startsWith("dbk_")) return null;
-  const [row] = await db.select({ id: apiKeys.id, name: apiKeys.name, lastUsedAt: apiKeys.lastUsedAt }).from(apiKeys).where(eq(apiKeys.hash, hash(token)));
+  const [row] = await db
+    .select({ id: apiKeys.id, name: apiKeys.name, lastUsedAt: apiKeys.lastUsedAt, recorder: apiKeys.recorder })
+    .from(apiKeys)
+    .where(eq(apiKeys.hash, hash(token)));
   if (!row) return null;
-  if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
-    await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id));
+  const recorder = recorderVersion(userAgent) ?? row.recorder;
+  if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000 || recorder !== row.recorder) {
+    await db.update(apiKeys).set({ lastUsedAt: new Date(), recorder }).where(eq(apiKeys.id, row.id));
   }
   return { id: row.id, name: row.name };
 }
