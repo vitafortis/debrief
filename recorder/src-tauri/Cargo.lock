@@ -842,6 +842,8 @@ dependencies = [
  "tauri-plugin-single-instance",
  "ureq",
  "uuid",
+ "windows",
+ "windows-core",
  "winreg",
 ]
 

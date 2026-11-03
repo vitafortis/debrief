@@ -45,6 +45,8 @@ pub struct Settings {
     pub microphone: String,
     /// Also record what the computer plays (the other side of the call).
     pub capture_system_audio: bool,
+    /// When a meeting app started the recording, only record that app's sound.
+    pub only_meeting_app: bool,
 
     /// Where recordings are written before (and after) upload.
     pub recordings_dir: String,
@@ -74,6 +76,7 @@ impl Default for Settings {
             stop_after_secs: 45,
             microphone: String::new(),
             capture_system_audio: true,
+            only_meeting_app: true,
             recordings_dir: String::new(),
             keep_local_days: 14,
             launch_at_login: true,

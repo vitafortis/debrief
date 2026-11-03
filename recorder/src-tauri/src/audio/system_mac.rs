@@ -1,6 +1,7 @@
 //! The Mac's own audio (the other side of the call) through a Core Audio
-//! process tap, macOS 14.2+. The first time, macOS asks for permission to
-//! record system audio; without it the tap is silent.
+//! process tap, macOS 14.2+: everything it plays, or just the meeting app's
+//! processes. The first time, macOS asks for permission to record system
+//! audio; without it the tap is silent.
 //!
 //! Adapted from Meetily's core_audio.rs (MIT, Copyright (c) 2024 Zackriya Solutions).
 
@@ -43,12 +44,18 @@ extern "C" fn io_proc(
 }
 
 impl TapStream {
-    pub fn start(tx: ChunkTx) -> Result<Self> {
+    /// Taps the given Core Audio process objects, or everything the Mac plays when there are none.
+    pub fn start(tx: ChunkTx, processes: &[u32]) -> Result<Self> {
         let output = ca::System::default_output_device().map_err(|e| anyhow!("no output device ({e:?})"))?;
         let output_uid = output.uid().map_err(|e| anyhow!("output device has no id ({e:?})"))?;
 
-        // Everything the Mac plays, mixed to mono.
-        let desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
+        let desc = if processes.is_empty() {
+            // Everything the Mac plays, mixed to mono.
+            ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new())
+        } else {
+            let ids: Vec<arc::R<ns::Number>> = processes.iter().map(|&p| ns::Number::with_u32(p)).collect();
+            ca::TapDesc::with_mono_mixdown_of_processes(&ns::Array::from_slice_retained(&ids))
+        };
         let tap = desc
             .create_process_tap()
             .map_err(|e| anyhow!("macOS refused the audio tap ({e:?}); needs macOS 14.2 or later"))?;
@@ -84,4 +91,43 @@ impl TapStream {
         let started = ca::device_start(device, Some(proc_id)).map_err(|e| anyhow!("starting the tap ({e:?})"))?;
         Ok(Self { _device: started, _ctx: ctx, _tap: tap })
     }
+}
+
+/// Where an app's sound actually comes from, by bundle id: the app and its
+/// helpers ("com.google.Chrome" covers "com.google.Chrome.helper"), and for
+/// Apple's apps the system process that plays their calls.
+pub fn sound_bundles(app_id: &str) -> Vec<String> {
+    let id = app_id.to_lowercase();
+    let base = id.find(".helper").map(|i| id[..i].to_string()).unwrap_or(id);
+    if base.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![base.clone()];
+    match base.as_str() {
+        "com.apple.facetime" => out.push("com.apple.avconferenced".into()),
+        "com.apple.safari" => out.push("com.apple.webkit.gpu".into()),
+        _ => {}
+    }
+    out
+}
+
+/// The Core Audio process objects playing (or able to play) the app's sound.
+pub fn app_processes(app_id: &str) -> Vec<u32> {
+    let bundles = sound_bundles(app_id);
+    if bundles.is_empty() {
+        return Vec::new();
+    }
+    let me = std::process::id() as i32;
+    let mut out: Vec<u32> = ca::System::processes()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| p.pid().is_ok_and(|pid| pid != me))
+        .filter(|p| p.bundle_id().is_ok_and(|b| {
+            let b = b.to_string().to_lowercase();
+            bundles.iter().any(|x| b.starts_with(x.as_str()))
+        }))
+        .map(|p| p.0 .0)
+        .collect();
+    out.sort_unstable();
+    out
 }
