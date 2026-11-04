@@ -509,10 +509,10 @@ function AddCalendar({
                   <input className="input h-8 text-xs" value={list[0].name || name} placeholder={source === "ics" ? "Client calendar" : list[0].externalId} onChange={(e) => setName(e.target.value)} />
                 </Row>
               )}
-              <Row label="Context" help="A short word like work or side. Meetings from it get its color, and the sidebar can show just them.">
+              <Row label="Context" help="A short word like work or side. Recordings from it get its color, and the sidebar can show just them.">
                 <input className="input h-8 text-xs" value={ctx} list="cal-contexts" onChange={(e) => setCtx(e.target.value)} />
               </Row>
-              <Row label="Tasks go to" help="The default for its meetings' action items. You can change any task.">
+              <Row label="Tasks go to" help="The default for its recordings' action items. You can change any task.">
                 <select className="input h-8 text-xs" value={dest} onChange={(e) => setDest(e.target.value)}>
                   <option value="akiflow">Akiflow</option>
                   <option value="linear">Linear</option>
@@ -590,7 +590,7 @@ export function CalendarSettings({ calendars, contexts, google, flash }: { calen
 
       {calendars.length > 0 && (
         <div className="space-y-2">
-          <SectionLabel name="Your calendars" note={on ? `${on} syncing, checked every few minutes. Turn one off to hide its meetings.` : "None are syncing."} />
+          <SectionLabel name="Your calendars" note={on ? `${on} syncing, checked every few minutes. Turn one off to hide its events and recordings.` : "None are syncing."} />
           <section className="card divide-y divide-border overflow-hidden">
             {calendars.map((c) => (
               <CalendarRow key={c.id} c={c} contexts={contexts} />

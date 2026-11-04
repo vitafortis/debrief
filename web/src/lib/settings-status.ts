@@ -76,7 +76,7 @@ export async function settingsStatus(): Promise<{ sections: Record<Exclude<Secti
       status: !on.length || broken.length || sync.state === "down" ? "need" : "ok",
       value: on.length ? `${on.length} syncing` : "None",
       detail: !on.length
-        ? "No calendar connected, so meetings stay untitled."
+        ? "No calendar connected, so recordings stay untitled."
         : broken.length
           ? `${broken.length} of ${on.length} can't sync. Open it to see why.`
           : sync.state === "down"

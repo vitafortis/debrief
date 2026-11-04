@@ -24,7 +24,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <PageHeader title="Search" description={context ? `In ${context} meetings.` : "Across every transcript."} />
+      <PageHeader title="Search" description={context ? `In ${context} recordings.` : "Across every transcript."} />
       <div className="space-y-5 px-4 pb-10 md:px-8">
         <form className="card flex flex-wrap items-end gap-3 p-3" role="search">
           <div className="relative min-w-60 flex-1">
@@ -55,7 +55,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
         {q && (
           <p className="text-xs text-muted-foreground">
-            {results.length === 50 ? "The top 50 meetings" : `${results.length} ${results.length === 1 ? "meeting" : "meetings"}`} matching{" "}
+            {results.length === 50 ? "The top 50 recordings" : `${results.length} ${results.length === 1 ? "recording" : "recordings"}`} matching{" "}
             <span className="text-foreground">{q}</span>
           </p>
         )}
@@ -66,7 +66,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           <div className="space-y-3">
             {results.map((r) => (
               <div key={r.transcriptId} className="card overflow-hidden">
-                <Link href={`/meetings/${r.transcriptId}?q=${encodeURIComponent(q)}`} className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 hover:bg-accent/40">
+                <Link href={`/recordings/${r.transcriptId}?q=${encodeURIComponent(q)}`} className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 hover:bg-accent/40">
                   <div className="min-w-0">
                     <p className="truncate text-[0.875rem] font-semibold tracking-tight">{r.title}</p>
                     <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
@@ -80,7 +80,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                   {r.excerpts.map((x, i) => (
                     <li key={i}>
                       <Link
-                        href={`/meetings/${r.transcriptId}?q=${encodeURIComponent(q)}${x.start != null ? `&t=${Math.floor(x.start)}` : ""}`}
+                        href={`/recordings/${r.transcriptId}?q=${encodeURIComponent(q)}${x.start != null ? `&t=${Math.floor(x.start)}` : ""}`}
                         className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 px-4 py-2 hover:bg-accent/40"
                       >
                         <span className="pt-0.5 text-right font-mono text-[0.6875rem] text-muted-foreground tabular-nums">{x.start != null ? clock(x.start) : ""}</span>

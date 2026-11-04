@@ -54,7 +54,7 @@ const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const fail = (msg: string) => ({ content: [{ type: "text" as const, text: msg }], isError: true });
 const plain = (s: string) => s.replaceAll(HL_START, "**").replaceAll(HL_END, "**");
-const link = (id: string) => (publicUrl() ? `${publicUrl()}/meetings/${id}` : undefined);
+const link = (id: string) => (publicUrl() ? `${publicUrl()}/recordings/${id}` : undefined);
 const date = (s: string | undefined, name: string) => {
   if (!s) return undefined;
   const d = new Date(s);

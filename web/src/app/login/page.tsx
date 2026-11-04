@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const oidc = oidcEnabled();
   const password = ownerPasswordSet();
   return (
-    <AuthCard title="Sign in to your meetings.">
+    <AuthCard title="Sign in to Debrief.">
       {oidc ? (
         <form action={signInWithOidc}>
           <input type="hidden" name="callbackUrl" value={callbackUrl} />

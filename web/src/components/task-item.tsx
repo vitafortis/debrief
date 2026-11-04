@@ -53,7 +53,7 @@ export function TaskItem({
   integrations,
 }: {
   task: TaskView;
-  /** Shown on the Tasks page, with a link to the moment in the meeting. */
+  /** Shown on the Tasks page, with a link to the moment in the recording. */
   meetingTitle?: string;
   selectable?: boolean;
   selected?: boolean;
@@ -87,7 +87,7 @@ export function TaskItem({
     );
 
   return (
-    // Actions sit beside the text when there's room (Tasks page), under it in the narrow meeting sidebar.
+    // Actions sit beside the text when there's room (Tasks page), under it in the narrow recording sidebar.
     <div className={`@container px-4 py-3 ${task.status === "dismissed" ? "opacity-55" : ""}`}>
     <div className="flex flex-wrap items-start gap-x-3 gap-y-2 @xl:flex-nowrap">
       {selectable && (
@@ -150,7 +150,7 @@ export function TaskItem({
               {task.dueDate && <span>· due {fmtDue(task.dueDate)}</span>}
               {meetingTitle && (
                 <Link
-                  href={`/meetings/${task.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`}
+                  href={`/recordings/${task.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`}
                   className="truncate hover:text-foreground"
                 >
                   · {meetingTitle}

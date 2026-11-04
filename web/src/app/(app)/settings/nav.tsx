@@ -19,7 +19,7 @@ const GROUPS: { label?: string; items: { key: SectionKey; href: string; label: s
     ],
   },
   {
-    label: "After the meeting",
+    label: "After the call",
     items: [
       { key: "ai", href: "/settings/ai", label: "AI summaries", icon: Sparkles },
       { key: "integrations", href: "/settings/integrations", label: "Slack & tasks", icon: Plug },

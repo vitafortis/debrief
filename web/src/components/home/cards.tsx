@@ -106,7 +106,7 @@ export function TranscriptionsCard({ queue, ready, readyCount }: { queue: Queued
         </div>
       ))}
       {ready.map((r) => (
-        <Link key={r.id} href={`/meetings/${r.id}`} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-border py-1.5 text-[0.8125rem]">
+        <Link key={r.id} href={`/recordings/${r.id}`} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-border py-1.5 text-[0.8125rem]">
           <span className="min-w-0">
             <span className="flex min-w-0 items-center gap-2">
               <span className={`truncate font-medium group-hover:text-primary ${r.untitled ? "text-muted-foreground italic" : ""}`}>{r.untitled ? "Untitled" : r.title}</span>
@@ -118,7 +118,7 @@ export function TranscriptionsCard({ queue, ready, readyCount }: { queue: Queued
         </Link>
       ))}
       {readyCount > ready.length && (
-        <Link href="/meetings" className="border-t border-border pt-1.5 text-xs text-muted-foreground hover:text-foreground">
+        <Link href="/recordings" className="border-t border-border pt-1.5 text-xs text-muted-foreground hover:text-foreground">
           {readyCount - ready.length} more ready →
         </Link>
       )}
@@ -195,7 +195,7 @@ const ISSUE: Record<CleanupIssue, string> = {
 
 /** The fix to offer first, and where it is. */
 function action(r: CleanupRow, canSummarize: boolean): { label: string; href: string } {
-  const page = `/meetings/${r.id}`;
+  const page = `/recordings/${r.id}`;
   const first = r.issues[0];
   if (first === "untitled") return { label: "Name it", href: page };
   if (first === "no-event") return { label: "Link event", href: page };
@@ -227,7 +227,7 @@ export function CleanupList({ rows, canSummarize }: { rows: CleanupRow[]; canSum
                 </span>
                 <span className="min-w-0">
                   <span className="flex min-w-0 items-center gap-2">
-                    <Link href={`/meetings/${r.id}`} className={`truncate font-semibold hover:text-primary ${r.untitled ? "text-muted-foreground italic" : ""}`}>
+                    <Link href={`/recordings/${r.id}`} className={`truncate font-semibold hover:text-primary ${r.untitled ? "text-muted-foreground italic" : ""}`}>
                       {r.untitled ? "Untitled" : r.title}
                     </Link>
                     <DeviceBadge badge={r.badge} />

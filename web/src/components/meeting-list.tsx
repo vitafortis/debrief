@@ -5,8 +5,8 @@ import { Trash2 } from "lucide-react";
 import { deleteMeetings } from "@/actions/meetings";
 import { useAction } from "@/components/task-item";
 
-/** The meetings on this page, each with a checkbox, and deleting the chosen ones at once. */
-export function MeetingList({ items }: { items: { id: string; title: string; row: ReactNode }[] }) {
+/** The recordings on this page, each with a checkbox, and deleting the chosen ones at once. */
+export function MeetingList({ items }: { items: { id: string; title: string; toReview?: boolean; row: ReactNode }[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, go] = useAction();
   const ids = useMemo(() => items.map((i) => i.id), [items]);
@@ -18,7 +18,7 @@ export function MeetingList({ items }: { items: { id: string; title: string; row
     const list = names.length > 8 ? [...names.slice(0, 8), `…and ${names.length - 8} more`] : names;
     if (
       confirm(
-        `Delete ${chosen.length === 1 ? "this meeting" : `these ${chosen.length} meetings`}?\n\n${list.join("\n")}\n\nTheir transcripts, summaries, action items, audio and shared screens are deleted everywhere Debrief keeps them. This can't be undone.`
+        `Delete ${chosen.length === 1 ? "this recording" : `these ${chosen.length} recordings`}?\n\n${list.join("\n")}\n\nTheir transcripts, summaries, action items, audio and shared screens are deleted everywhere Debrief keeps them. This can't be undone.`,
       )
     )
       go(() => deleteMeetings(chosen), clear);
@@ -32,9 +32,9 @@ export function MeetingList({ items }: { items: { id: string; title: string; row
           className="checkbox"
           checked={all}
           onChange={(e) => setSelected(e.target.checked ? new Set(ids) : new Set())}
-          aria-label="Select all meetings on this page"
+          aria-label="Select all recordings on this page"
         />
-        <span className="text-xs text-muted-foreground">{chosen.length ? `${chosen.length} selected` : "Select meetings to delete several at once"}</span>
+        <span className="text-xs text-muted-foreground">{chosen.length ? `${chosen.length} selected` : "Select recordings to delete several at once"}</span>
         {chosen.length > 0 && (
           <div className="ml-auto flex gap-1.5">
             <button className="btn btn-ghost btn-sm" disabled={pending} onClick={clear}>
@@ -62,7 +62,11 @@ export function MeetingList({ items }: { items: { id: string; title: string; row
             }
             aria-label={`Select ${i.title}`}
           />
-          <div className="min-w-0 flex-1">{i.row}</div>
+          <div className="relative min-w-0 flex-1">
+            {i.row}
+            {/* Transcribed and not opened yet. */}
+            {i.toReview && <span className="badge badge-success pointer-events-none absolute top-2 right-10 text-[0.625rem]">To review</span>}
+          </div>
         </div>
       ))}
     </div>

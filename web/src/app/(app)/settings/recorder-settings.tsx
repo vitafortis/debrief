@@ -216,14 +216,14 @@ function DeviceRow({ d, contexts }: { d: Device; contexts: string[] }) {
   );
 }
 
-/** Per-device tagging: off until a context is picked, and only used when a meeting has no calendar event. */
+/** Per-device tagging: off until a context is picked, and only used when a recording has no calendar event. */
 export function DeviceSettings({ devices, contexts }: { devices: Device[]; contexts: string[] }) {
   return (
     <section className="card overflow-hidden">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">Devices</h2>
         <p className="text-xs text-muted-foreground">
-          Computers recordings came from. Nothing is tagged by device unless you pick a context here, and a meeting&apos;s calendar event always wins; this
+          Computers recordings came from. Nothing is tagged by device unless you pick a context here, and a recording&apos;s calendar event always wins; this
           covers calls with no event.
         </p>
       </div>

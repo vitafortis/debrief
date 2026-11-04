@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Debrief", template: "%s · Debrief" },
-  description: "Meeting transcripts, calendar context and follow-ups.",
+  description: "Call recordings, transcripts, calendar context and follow-ups.",
 };
 
 export const viewport: Viewport = {

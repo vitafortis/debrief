@@ -25,7 +25,7 @@ export async function renameMeeting(transcriptId: string, title: string) {
   return run(async () => {
     const t = z.string().trim().max(200).parse(title);
     await db().update(transcripts).set({ title: t || null }).where(eq(transcripts.id, uuid.parse(transcriptId)));
-  }, `/meetings/${transcriptId}`);
+  }, `/recordings/${transcriptId}`);
 }
 
 export async function renameSpeakers(transcriptId: string, names: Record<string, string>) {
@@ -36,7 +36,7 @@ export async function renameSpeakers(transcriptId: string, names: Record<string,
         .filter(([, v]) => v)
     );
     await db().update(transcripts).set({ speakerNames: clean }).where(eq(transcripts.id, uuid.parse(transcriptId)));
-  }, `/meetings/${transcriptId}`);
+  }, `/recordings/${transcriptId}`);
 }
 
 export async function saveSummary(transcriptId: string, summary: string) {
@@ -45,7 +45,7 @@ export async function saveSummary(transcriptId: string, summary: string) {
     await db().update(transcripts).set({ summary: s || null }).where(eq(transcripts.id, uuid.parse(transcriptId)));
     // Rewrites the notes file, and tells Slack if it hasn't heard about this meeting yet.
     if (s) await requestPublish(db(), transcriptId);
-  }, `/meetings/${transcriptId}`);
+  }, `/recordings/${transcriptId}`);
 }
 
 /** Posts the meeting's summary and action items to Slack again, and rewrites its notes file. */
@@ -54,14 +54,14 @@ export async function sendToSlack(transcriptId: string) {
     if (!slackConfigured()) throw new Error("Set SLACK_WEBHOOK_URL (or SLACK_WEBHOOKS per context) first.");
     await requestPublish(db(), uuid.parse(transcriptId), true);
     return "Sending to Slack.";
-  }, `/meetings/${transcriptId}`);
+  }, `/recordings/${transcriptId}`);
 }
 
 /** Links a meeting to a calendar event by hand, or (null) goes back to matching by time. */
 export async function setMeetingEvent(transcriptId: string, eventId: string | null) {
   return run(async () => {
     await linkTranscript(db(), uuid.parse(transcriptId), eventId ? uuid.parse(eventId) : null);
-  }, `/meetings/${transcriptId}`, "/meetings", "/calendar");
+  }, `/recordings/${transcriptId}`, "/recordings", "/calendar");
 }
 
 export async function retranscribe(recordingId: string) {
@@ -82,24 +82,24 @@ export async function deleteMeeting(recordingId: string) {
   return run(async () => {
     if (!(await deleteRecording(db(), uuid.parse(recordingId)))) throw new Error("It's already gone.");
     return "Deleted.";
-  }, "/", "/meetings", "/calendar", "/tasks", "/search");
+  }, "/", "/recordings", "/calendar", "/tasks", "/search");
 }
 
-/** Deletes several meetings the same way, one after another; stops at the first that can't be. */
+/** Deletes several recordings the same way, one after another; stops at the first that can't be. */
 export async function deleteMeetings(recordingIds: string[]) {
   return run(async () => {
     const ids = z.array(uuid).min(1).max(200).parse(recordingIds);
     let n = 0;
     for (const id of ids) if (await deleteRecording(db(), id)) n++;
-    return n === 1 ? "Deleted 1 meeting." : `Deleted ${n} meetings.`;
-  }, "/", "/meetings", "/calendar", "/tasks", "/search");
+    return n === 1 ? "Deleted 1 recording." : `Deleted ${n} recordings.`;
+  }, "/", "/recordings", "/calendar", "/tasks", "/search");
 }
 
 export async function extractTasks(transcriptId: string) {
   return run(async () => {
     const out = await extractWithAi(db(), uuid.parse(transcriptId));
     return out.tasks.length ? `Found ${out.tasks.length} action items.` : "No action items in this one.";
-  }, `/meetings/${transcriptId}`, "/tasks", "/");
+  }, `/recordings/${transcriptId}`, "/tasks", "/");
 }
 
 /** Asks calendar-sync to sync now (it listens on this channel). */

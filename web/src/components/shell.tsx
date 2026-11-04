@@ -8,7 +8,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
-  MessagesSquare,
+  AudioLines,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,7 +24,7 @@ import { VersionBadge, type BuildStatus } from "@/components/version-badge";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/meetings", label: "Meetings", icon: MessagesSquare },
+  { href: "/recordings", label: "Recordings", icon: AudioLines },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/search", label: "Search", icon: Search },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
@@ -75,7 +75,7 @@ export function Shell({
   contexts: string[];
   context: string | null;
   pendingTasks: number;
-  /** Recordings waiting for or in the transcriber: a count beside Meetings. */
+  /** Recordings waiting for or in the transcriber: a count beside Recordings. */
   transcribing: number;
   build: BuildStatus;
 }) {
@@ -120,7 +120,7 @@ export function Shell({
                 {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-primary" />}
                 <n.icon className="size-4 shrink-0" />
                 {!collapsed && <span className="flex-1">{n.label}</span>}
-                {!collapsed && n.href === "/meetings" && transcribing > 0 && (
+                {!collapsed && n.href === "/recordings" && transcribing > 0 && (
                   <span title={`${transcribing} transcribing or queued`} className="flex items-center gap-1 rounded-md bg-muted px-1.5 font-mono text-[0.6875rem] text-muted-foreground tabular-nums">
                     <span className="dot-busy size-1.5 rounded-full" />
                     {transcribing}

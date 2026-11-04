@@ -92,7 +92,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
           untitled: false,
           color: contextColor(e.context, contexts),
           kind,
-          href: e.transcriptId ? `/meetings/${e.transcriptId}` : null,
+          href: e.transcriptId ? `/recordings/${e.transcriptId}` : null,
           cleanup: !!e.transcriptId && cleanupIds.has(e.transcriptId),
           time: fmtTime(e.startAt),
         };
@@ -111,7 +111,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
           untitled: m.untitled,
           color: b ? DEVICE_SWATCH[b.color] : contextColor(m.context, contexts),
           kind: "recorded",
-          href: `/meetings/${m.id}`,
+          href: `/recordings/${m.id}`,
           cleanup: cleanupIds.has(m.id),
           time: fmtTime(m.recordedAt),
         };
@@ -145,7 +145,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
 
   const steps: SetupStep[] = [
     { title: "Install the recorder", detail: "Records your calls and uploads them.", done: !!anyRecording, href: "/settings/devices#recorder", action: "Get it" },
-    { title: "Connect a calendar", detail: "Names your meetings and shows what's coming up.", done: calendarConnected, href: "/settings/calendars", action: "Connect" },
+    { title: "Connect a calendar", detail: "Names your recordings and shows what's coming up.", done: calendarConnected, href: "/settings/calendars", action: "Connect" },
     { title: "Connect an AI provider", detail: "Writes summaries and finds the action items: Claude, OpenAI, Gemini or your own.", done: extractionAvailable(), href: "/settings/ai", action: "Connect" },
     { title: "Speaker labels", detail: "Tells apart the people on a call.", done: !!setting("HF_TOKEN"), href: "/settings/transcription", action: "Set up", optional: true },
     {
