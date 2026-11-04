@@ -116,7 +116,7 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
     }
     log::info!("Recording {} ({})", local.id, trigger.as_deref().unwrap_or("by hand"));
     let started = Instant::now();
-    let screens = app_user.filter(|_| s.capture_screens).map(|u| screens::Watcher::start(local.dir(&root), u.name, u.id, started));
+    let screens = app_user.filter(|_| s.capture_screens).map(|u| screens::Watcher::start(local.dir(&root), u.name, u.id, started, s.record_video));
     *st.current_id.lock().unwrap() = Some(local.id);
     *active = Some(Active { rec, screens, local, started, trigger, last_seen: Instant::now() });
     drop(active);

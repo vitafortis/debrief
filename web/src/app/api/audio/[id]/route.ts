@@ -1,11 +1,10 @@
-import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { eq } from "drizzle-orm";
 import { recordings } from "@debrief/core/schema";
 import { locateAudio, presignedAudioUrl } from "@debrief/core/storage";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
+import { fileResponse } from "@/lib/file-response";
 
 const TYPES: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -39,22 +38,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (found.kind === "s3") return Response.redirect(await presignedAudioUrl(found.key), 302);
   const { path: file, size } = found;
 
-  const headers = new Headers({
-    "content-type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",
-    "accept-ranges": "bytes",
-    "cache-control": "private, max-age=3600",
-  });
-  const range = req.headers.get("range")?.match(/^bytes=(\d*)-(\d*)$/);
-  if (range && (range[1] || range[2])) {
-    let start = range[1] ? Number(range[1]) : size - Number(range[2]);
-    let end = range[1] && range[2] ? Number(range[2]) : size - 1;
-    start = Math.max(0, start);
-    end = Math.min(end, size - 1);
-    if (start > end) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
-    headers.set("content-range", `bytes ${start}-${end}/${size}`);
-    headers.set("content-length", String(end - start + 1));
-    return new Response(Readable.toWeb(fs.createReadStream(/*turbopackIgnore: true*/ file, { start, end })) as ReadableStream, { status: 206, headers });
-  }
-  headers.set("content-length", String(size));
-  return new Response(Readable.toWeb(fs.createReadStream(/*turbopackIgnore: true*/ file)) as ReadableStream, { headers });
+  return fileResponse(req, file, size, TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream");
 }

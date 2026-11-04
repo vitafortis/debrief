@@ -277,16 +277,28 @@ async function removeExports(id: string, recordedAt: Date) {
   }
 }
 
-/** The shared screens beside a recording on the server (they aren't archived). */
+/** The shared screens and window videos beside a recording on the server (they aren't archived). */
 async function removeScreens(root: string, rel: string) {
-  const dir = inRoot(root, path.posix.join(path.posix.dirname(rel), "screens"));
-  await fs.promises.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
-  await removeEmptyDirs(path.dirname(dir), root);
+  for (const sub of ["screens", "video"]) {
+    const dir = inRoot(root, path.posix.join(path.posix.dirname(rel), sub));
+    await fs.promises.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
+  }
+  await removeEmptyDirs(inRoot(root, path.posix.dirname(rel)), root);
+}
+
+/** Videos of the meeting window beside a recording on the server, by when in the recording each starts. */
+export async function listVideos(rel: string) {
+  const dir = inRoot(recordingsDir(), path.posix.join(path.posix.dirname(rel), "video"));
+  const names = await fs.promises.readdir(/*turbopackIgnore: true*/ dir).catch(() => [] as string[]);
+  return names
+    .filter((n) => /^\d{9}\.mp4$/.test(n))
+    .map((n) => ({ ms: Number(n.slice(0, 9)), file: path.join(dir, n) }))
+    .sort((a, b) => a.ms - b.ms);
 }
 
 /**
  * Deletes a recording everywhere Debrief keeps it: the audio on the server,
- * in the NAS folder and in S3, its shared screens, the exported transcript and notes, then the
+ * in the NAS folder and in S3, its shared screens and videos, the exported transcript and notes, then the
  * recording with its transcript, summary and action items. The files go
  * first, so a watched NAS folder can't bring it back; if one can't be
  * deleted, nothing else is.

@@ -49,6 +49,8 @@ pub struct Settings {
     pub only_meeting_app: bool,
     /// Save what's presented in the meeting app's window, for Debrief to read the text from.
     pub capture_screens: bool,
+    /// Also record the meeting app's window as video, so movement (typing, scrolling, the pointer) is kept (macOS 15+).
+    pub record_video: bool,
 
     /// Where recordings are written before (and after) upload.
     pub recordings_dir: String,
@@ -80,6 +82,7 @@ impl Default for Settings {
             capture_system_audio: true,
             only_meeting_app: true,
             capture_screens: true,
+            record_video: true,
             recordings_dir: String::new(),
             keep_local_days: 14,
             launch_at_login: true,

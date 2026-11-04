@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 // These tests change the seeded data, so a retry would start from a different state.
@@ -124,6 +127,22 @@ test.describe("signed in", () => {
     await expect(page.getByText("Reusable finding blocks and severity tables")).toBeVisible();
     await page.getByRole("tab", { name: "Transcript" }).click();
     await expect(page.getByText("Every pentester we talked to asked for it.")).toBeVisible();
+  });
+
+  test("a recording's window video sits above the audio, and can be hidden", async ({ page }) => {
+    // Where the recorder's upload would have put it (RECORDINGS_DIR in playwright.config.ts), ten seconds in.
+    const dir = path.join(os.tmpdir(), "debrief-e2e-recordings", "win-desktop", "lumen_roadmap", "video");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "000010000.mp4"), Buffer.from("\0\0\0\x18ftypmp42"));
+    try {
+      await page.goto("/recordings");
+      await page.getByRole("link", { name: /lumen roadmap/ }).click();
+      await expect(page.getByText("The meeting window wasn't showing yet.")).toBeVisible();
+      await page.getByRole("button", { name: "Video" }).click();
+      await expect(page.getByText("The meeting window wasn't showing yet.")).toBeHidden();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("tasks: edit, approve, dismiss and restore", async ({ page }) => {

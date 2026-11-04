@@ -12,7 +12,7 @@ use std::task::{Poll, Wake};
 use std::time::{Duration, Instant};
 
 /// Runs one of ScreenCaptureKit's completion-handler calls to the end, or gives up after 10 s.
-fn wait<F: Future>(f: F) -> Option<F::Output> {
+pub(super) fn wait<F: Future>(f: F) -> Option<F::Output> {
     struct Unpark(std::thread::Thread);
     impl Wake for Unpark {
         fn wake(self: Arc<Self>) {
@@ -34,7 +34,8 @@ fn wait<F: Future>(f: F) -> Option<F::Output> {
     }
 }
 
-pub fn grab(app_id: &str, browser: bool) -> Result<Option<Frame>> {
+/// The app's biggest window that's showing (for a browser, one on a call's tab).
+pub fn find(app_id: &str, browser: bool) -> Result<Option<arc::R<sc::Window>>> {
     let id = app_id.to_lowercase();
     let base = id.find(".helper").map(|i| id[..i].to_string()).unwrap_or(id);
     if base.is_empty() {
@@ -64,12 +65,15 @@ pub fn grab(app_id: &str, browser: bool) -> Result<Option<Frame>> {
             best = Some((area, w.retained()));
         }
     }
-    let Some((_, window)) = best else { return Ok(None) };
+    Ok(best.map(|(_, w)| w))
+}
 
+/// One still of the window.
+pub fn capture(window: &sc::Window) -> Result<Option<Frame>> {
     // Twice the window's size in points: Retina pixels, so small text stays readable.
     let size = window.frame().size;
     let scale = (2.0f64).min(2880.0 / size.width);
-    let filter = sc::ContentFilter::with_desktop_independent_window(&window);
+    let filter = sc::ContentFilter::with_desktop_independent_window(window);
     let mut cfg = sc::StreamCfg::new();
     cfg.set_width((size.width * scale) as usize);
     cfg.set_height((size.height * scale) as usize);

@@ -362,7 +362,7 @@ test("calendars added with the same ID are turned on again rather than doubled",
   assert.equal(rows[0].enabled, true);
 });
 
-test("deleting a recording removes its audio, archive copy, exports and transcript, and stops the recorder sending it", { skip }, async () => {
+test("deleting a recording removes its audio, screens, video, archive copy, exports and transcript, and stops the recorder sending it", { skip }, async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
   const path = await import("node:path");
@@ -389,11 +389,22 @@ test("deleting a recording removes its audio, archive copy, exports and transcri
     const [u] = await db.select().from(core!.uploads).where(sql`id = ${id}`);
     const rel = `${u.folder}/audio.opus`;
     assert.ok(fs.existsSync(path.join(local, u.folder, "screens", "000012500.jpg")));
+    // A video of the meeting window comes after the audio, in pieces, and is kept once all of it is here.
+    const mp4 = Buffer.from("\0\0\0\x18ftypmp42 rest of the movie");
+    const piece = (b: Buffer) => Readable.from([b]);
+    assert.deepEqual(await up.appendVideo(db, id, 90_000, 0, mp4.length, piece(mp4.subarray(0, 10)), 10, local), { offset: 10, done: false });
+    await assert.rejects(up.appendVideo(db, id, 90_000, 0, mp4.length, piece(mp4), null, local), (e: InstanceType<typeof up.UploadError>) => e.status === 409 && e.offset === 10);
+    assert.deepEqual(await up.appendVideo(db, id, 90_000, 10, mp4.length, piece(mp4.subarray(10)), null, local), { offset: mp4.length, done: true });
+    assert.deepEqual(await up.appendVideo(db, id, 90_000, 0, mp4.length, piece(mp4), null, local), { offset: mp4.length, done: true });
+    assert.equal(fs.readFileSync(path.join(local, u.folder, "video", "000090000.mp4")).toString(), mp4.toString());
+    await assert.rejects(up.appendVideo(db, id, 95_000, 0, 4, piece(Buffer.from("nope")), null, local), (e: InstanceType<typeof up.UploadError>) => e.status === 415);
+    assert.deepEqual(fs.readdirSync(path.join(local, u.folder, "video")), ["000090000.mp4"]);
     const [rec] = await db.select().from(core!.recordings).where(sql`file_path = ${rel}`);
     const [tr] = await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Something sensitive." }).returning();
     await db.insert(core!.screens).values({ recordingId: rec.id, atSecs: 12.5, filePath: `${u.folder}/screens/000012500.jpg`, text: "Launch checklist: pricing page, docs" });
     const m = (await core!.getMeeting(db, tr.id))!;
     assert.deepEqual(m.screens.map((x) => [x.atSecs, x.text]), [[12.5, "Launch checklist: pricing page, docs"]]);
+    assert.deepEqual(m.videoStarts, [90_000]);
     assert.match(core!.meetingBrief(m), /Text on screens shared[\s\S]*\[0:12\]\nLaunch checklist/);
     // An archive copy with its sidecar, and the exports.
     fs.mkdirSync(path.join(nas, u.folder), { recursive: true });
