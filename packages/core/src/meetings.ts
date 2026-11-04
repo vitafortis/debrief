@@ -87,6 +87,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
   const rows = await db
     .select({
       id: transcripts.id,
+      recordingId: recordings.id,
       title: transcripts.title,
       summary: transcripts.summary,
       recordedAt: recordings.recordedAt,

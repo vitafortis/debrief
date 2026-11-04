@@ -8,6 +8,7 @@ import { addDays, zonedMidnight } from "@/lib/format";
 import { contextColor } from "@/lib/colors";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { MeetingRow } from "@/components/meeting-row";
+import { MeetingList } from "@/components/meeting-list";
 import { InProgress } from "@/components/in-progress";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -120,11 +121,13 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
         />
 
         {list.length ? (
-          <div className="grid gap-2">
-            {list.map((m) => (
-              <MeetingRow key={m.id} m={m} color={contextColor(m.context, contexts)} badge={m.device ? badges[m.device] : undefined} />
-            ))}
-          </div>
+          <MeetingList
+            items={list.map((m) => ({
+              id: m.recordingId,
+              title: m.untitled ? "Untitled" : m.displayTitle,
+              row: <MeetingRow m={m} color={contextColor(m.context, contexts)} badge={m.device ? badges[m.device] : undefined} />,
+            }))}
+          />
         ) : filtering ? (
           <EmptyState
             icon={SearchX}
