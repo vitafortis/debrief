@@ -85,6 +85,16 @@ export async function deleteMeeting(recordingId: string) {
   }, "/", "/meetings", "/calendar", "/tasks", "/search");
 }
 
+/** Deletes several meetings the same way, one after another; stops at the first that can't be. */
+export async function deleteMeetings(recordingIds: string[]) {
+  return run(async () => {
+    const ids = z.array(uuid).min(1).max(200).parse(recordingIds);
+    let n = 0;
+    for (const id of ids) if (await deleteRecording(db(), id)) n++;
+    return n === 1 ? "Deleted 1 meeting." : `Deleted ${n} meetings.`;
+  }, "/", "/meetings", "/calendar", "/tasks", "/search");
+}
+
 export async function extractTasks(transcriptId: string) {
   return run(async () => {
     const out = await extractWithAi(db(), uuid.parse(transcriptId));
