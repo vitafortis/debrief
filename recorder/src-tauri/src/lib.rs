@@ -751,9 +751,12 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app")
-        .run(|_app, e| {
-            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = e {
-                api.prevent_exit();
-            }
+        .run(|_app, e| match e {
+            tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
+            // Opening the app from Finder or Launchpad while it runs: macOS tells this one
+            // instead of starting another, so the single-instance hook never hears of it.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => open_settings(_app),
+            _ => {}
         });
 }
