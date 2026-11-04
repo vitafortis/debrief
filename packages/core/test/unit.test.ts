@@ -106,7 +106,7 @@ test("akiflow payload follows the plan's shape and dedup key", () => {
   assert.equal(p.due_date, "2026-10-25");
   assert.equal(p.priority, "high");
   assert.match(p.description, /^From Standup 10\/22 — Sarah mentioned/);
-  assert.match(p.description, /https:\/\/debrief\.example\.dev\/meetings\/abc123\?t=125/);
+  assert.match(p.description, /https:\/\/debrief\.example\.dev\/recordings\/abc123\?t=125/);
 });
 
 test("clock and speaker labels", () => {

@@ -293,7 +293,7 @@ test("the Slack message carries the summary and each action item's details", { s
   const text = JSON.stringify(msg.blocks);
   assert.match(text, /Agreed the &lt;Q4&gt; pricing &amp; deck\./);
   assert.match(text, /Send the pricing deck/);
-  assert.match(text, /https:\/\/debrief\.example\/meetings\//);
+  assert.match(text, /https:\/\/debrief\.example\/recordings\//);
   assert.ok(core!.meetingMarkdown(m).includes("## Action items"));
 });
 
