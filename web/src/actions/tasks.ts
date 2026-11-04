@@ -11,7 +11,7 @@ type Result = { ok: true; message?: string } | { ok: false; error: string };
 function done(message?: string): Result {
   revalidatePath("/tasks");
   revalidatePath("/");
-  revalidatePath("/meetings/[id]", "page");
+  revalidatePath("/recordings/[id]", "page");
   return { ok: true, message };
 }
 const fail = (err: unknown): Result => ({

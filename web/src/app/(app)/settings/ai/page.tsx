@@ -13,7 +13,7 @@ export default async function AiSettings() {
   return (
     <>
       <PageHead title="AI summaries">
-        Once a meeting is transcribed, a model writes its summary and pulls out the action items. Bring a key from whichever provider you use, or run your own model.
+        Once a recording is transcribed, a model writes its summary and pulls out the action items. Bring a key from whichever provider you use, or run your own model.
       </PageHead>
       <SettingsForm
         fields={fields}
@@ -24,7 +24,7 @@ export default async function AiSettings() {
               <div className="space-y-2 pt-4">
                 <SectionLabel
                   name="Or use your assistant"
-                  note="Debrief has an MCP server, so Claude, ChatGPT or any MCP client can search your meetings and file tasks itself, with no key here."
+                  note="Debrief has an MCP server, so Claude, ChatGPT or any MCP client can search your recordings and file tasks itself, with no key here."
                 />
                 <section className="card grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)] md:items-center md:gap-6">
                   <div>

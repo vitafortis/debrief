@@ -12,8 +12,8 @@ The Debrief Recorder on your Mac or PC notices when a meeting app takes the micr
 
 | | |
 |---|---|
-| ![A meeting](docs/screenshots/meeting.png) | ![Search](docs/screenshots/search.png) |
-| **A meeting.** The event, attendees, summary and action items sit beside the transcript. The line being spoken stays highlighted; click any line to jump there. | **Search.** Full text over every meeting, showing who said each matching line and when. |
+| ![A recording](docs/screenshots/meeting.png) | ![Search](docs/screenshots/search.png) |
+| **A recording.** The event, attendees, summary and action items sit beside the transcript. The line being spoken stays highlighted; click any line to jump there. | **Search.** Full text over every recording, showing who said each matching line and when. |
 | ![Calendar](docs/screenshots/calendar.png) | ![Tasks](docs/screenshots/tasks-light.png) |
 | **Calendar.** Each meeting shows whether it has been recorded, is transcribing, or is ready. | **Tasks.** Review in bulk, edit, then send to Akiflow or Linear. |
 
@@ -211,7 +211,7 @@ Without it, transcripts work the same, but the other people on a call aren't tol
 - **Automatic summaries.** In Settings → AI summaries, pick a provider (Anthropic, OpenAI, Google Gemini, or your own OpenAI-compatible server such as Ollama) and add its key; **Test connection** checks it. Each new meeting is then summarized, and its action items found, as soon as it's transcribed and matched to its event.
 - **Slack.** Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) (*From scratch*), open **Incoming Webhooks**, turn them on, and **Add New Webhook to Workspace** for the channel you want. Paste the URL into Settings → Slack & tasks. For a channel per context, fill in *Slack webhook per context* (`work:https://hooks.slack.com/…,side:https://hooks.slack.com/…`).
 
-  Once a meeting has its summary, Slack gets the title, time, length and attendees, the summary, and every action item with its details, owner, due date, priority, destination and a link to the moment it was said. Each meeting is posted once; **Slack → Send again** on a meeting page posts it again.
+  Once a meeting has its summary, Slack gets the title, time, length and attendees, the summary, and every action item with its details, owner, due date, priority, destination and a link to the moment it was said. Each meeting is posted once; **Slack → Send again** on a recording's page posts it again.
 - **Akiflow** has no public API, so Debrief posts each task to a webhook and an automation creates it.
   1. In Zapier (or Make, or IFTTT), create a Zap with a **Webhooks by Zapier → Catch Hook** trigger and an **Akiflow → Create Task** action.
   2. Map `title`, `description`, `date`, `due_date`, `duration` and `priority` from the hook.
@@ -226,7 +226,7 @@ Without it, transcripts work the same, but the other people on a call aren't tol
     "duration": 30,
     "priority": "high",
     "due_date": "2026-10-25",
-    "description": "From Standup 10/22 — Sarah mentioned API v2 timeline may slip\nhttps://debrief.example.com/meetings/…?t=125",
+    "description": "From Standup 10/22 — Sarah mentioned API v2 timeline may slip\nhttps://debrief.example.com/recordings/…?t=125",
     "context": "work",
     "uniqueIdentifier": "debrief-<meeting id>-1"
   }
@@ -317,13 +317,21 @@ Archived recordings land in `audio/<device>/<start>_<id>/audio.opus`, beside a `
 
 ### The sidebar and calendar filter
 
-Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the home page, meetings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
+Under **Calendars** in the sidebar, pick a context (e.g. *Acme*) to narrow every page to it: the home page, recordings, calendar, search and tasks. **All** shows everything. The choice is remembered. Press **⌘B** (Ctrl+B) to collapse the sidebar; the sun and moon button switches between light and dark.
 
 At the bottom of the sidebar is the version you're running, with a dot: green when every service is up and on the same build, blue when a newer build is out, amber when a service is down or on a different build. Click it to see each service and what to do. Updating is pulling the images and redeploying the stack.
 
-### A meeting
+### Recordings
 
-Open one from the dashboard, **Meetings** or the **Calendar**.
+**Recordings** in the sidebar lists everything recorded, newest first:
+- **Status counts** along the top: recording or uploading, queued, transcribing, failed, and to review. The sidebar also shows a count while anything is queued or transcribing.
+- **In progress:** anything still uploading, queued, transcribing or failed is listed above the rest, with **Retry** for a failure.
+- **Filters:** **To review** shows what's transcribed but not opened yet (each is marked *To review* in the list), **Reviewed** what you've opened, and **No event** what didn't match a calendar event. Search by words, attendee, device and date.
+- **Deleting:** tick several and **Delete** removes them everywhere at once.
+
+### A recording
+
+Open one from the dashboard, **Recordings** or the **Calendar**.
 
 **Playing and reading:**
 - **Player:** play/pause with the button or the space bar. **J** and **L** skip 10 seconds, the arrow buttons skip 15, and you can change the speed or click the waveform to jump.
@@ -331,7 +339,7 @@ Open one from the dashboard, **Meetings** or the **Calendar**.
 - **Find in transcript:** marks every match. Press Enter (or Shift+Enter) to step through them.
 
 **Fixing the details:**
-- **Title:** click it to rename the meeting. Leave it empty to use the calendar event's title.
+- **Title:** click it to rename the recording. Leave it empty to use the calendar event's title.
 - **Calendar event:** if the time matching picked the wrong event, or nothing, choose the right one from the events around that time. *Match automatically* goes back to matching by time.
 - **Speakers:** with speaker labels on, the transcript says *Speaker 1*, *Speaker 2* and so on. Type names under **Speakers** and they're used everywhere: the transcript, search, exports and what Claude reads.
 - **Summary:** Claude writes one when it extracts tasks. Click it to edit, or write your own.
@@ -520,7 +528,7 @@ Settings live in the database too, so this backs them up. Recordings are in the 
 | No shared screens | The recorder's *Shared screens* must be on, and on a Mac it needs Screen & System Audio Recording. The call's window must be open, and for a browser the call must be the window's current tab. Frames with little text are dropped on purpose. The transcriber log says "Shared screens of …: kept N of M". |
 | The popup never appears | The recorder's Settings → *When an app uses the microphone* must be on, and the app's rule must be *Ask*. Settings lists the apps it sees using the microphone; if yours isn't there while in a call, check the app has microphone access. |
 | No Slack message | Settings → Overview shows whether Slack is set up. `docker compose logs calendar-sync` shows "sent to Slack" or Slack's error. Messages go out once a meeting has a summary. |
-| A meeting has no calendar event | Is the calendar synced (Settings → Calendars shows the last sync or an error)? Is the time zone right? A recording needs to overlap an event by 70%. Pick the event by hand on the meeting page if needed. |
+| A meeting has no calendar event | Is the calendar synced (Settings → Calendars shows the last sync or an error)? Is the time zone right? A recording needs to overlap an event by 70%. Pick the event by hand on the recording's page if needed. |
 | Calendar error "Not Found" or 403 | The service account hasn't been given access to that calendar, or the calendar ID is wrong. Debrief's message on the calendar says which. |
 | Google says "redirect_uri_mismatch" | The redirect URI in Google Cloud must match the one shown in Debrief's steps exactly, https:// included. Behind a proxy, set the address in Settings → Account → Advanced. |
 | Google stops syncing after a week | The OAuth app is still in testing. In Google Auth Platform → Audience, choose **Publish app**, then connect Google again. |

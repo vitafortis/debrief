@@ -10,7 +10,7 @@ export type Queued = { id: string; title: string | null; device: string | null; 
 // The recorder sends every 10–20 s while recording; quieter than this, it was cut off or is catching up.
 const LIVE_MS = 2 * 60_000;
 
-/** Recordings that aren't meetings yet: still coming from a recorder, waiting for the transcriber, transcribing, or failed. */
+/** Recordings that aren't transcribed yet: still coming from a recorder, waiting for the transcriber, transcribing, or failed. */
 export function InProgress({ uploading, queue, badges, now = new Date() }: { uploading: Uploading[]; queue: Queued[]; badges: Record<string, Badge>; now?: Date }) {
   if (!uploading.length && !queue.length) return null;
   const name = (title: string | null, device: string | null) => title?.trim() || `Recording from ${(device && badges[device]?.label) || device || "a recorder"}`;

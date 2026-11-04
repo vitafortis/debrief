@@ -13,7 +13,7 @@ const month = (d: Date) => fmt({ month: "short" }).format(d);
 export function MeetingRow({ m, color, badge }: { m: MeetingSummary; color: string; badge?: Badge }) {
   return (
     <Link
-      href={`/meetings/${m.id}`}
+      href={`/recordings/${m.id}`}
       className="card group flex items-center gap-4 p-3 pr-4 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-surface-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       <span className="flex w-12 shrink-0 flex-col items-center rounded-lg bg-muted py-1.5 leading-none" aria-hidden>

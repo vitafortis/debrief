@@ -11,19 +11,19 @@ async function signIn(page: Page) {
 }
 
 test("signing in: wrong password is refused, the right one lands on today", async ({ page }) => {
-  await page.goto("/meetings");
-  await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fmeetings/);
+  await page.goto("/recordings");
+  await expect(page).toHaveURL(/\/login\?callbackUrl=%2Frecordings/);
   await page.fill("#pw", "nope");
   await page.click("button:has-text('Sign in')");
   await expect(page.getByText("That password isn't right.")).toBeVisible();
   await page.fill("#pw", "e2e-password");
   await page.click("button:has-text('Sign in')");
-  await expect(page).toHaveURL("/meetings");
+  await expect(page).toHaveURL("/recordings");
 });
 
 test("API routes need a session", async ({ request }) => {
   expect((await request.get("/api/audio/00000000-0000-0000-0000-000000000000")).status()).toBe(401);
-  expect((await request.get("/api/meetings/00000000-0000-0000-0000-000000000000/export")).status()).toBe(401);
+  expect((await request.get("/api/recordings/00000000-0000-0000-0000-000000000000/export")).status()).toBe(401);
   expect((await request.get("/api/health")).status()).toBe(200);
 });
 
@@ -51,8 +51,8 @@ test.describe("signed in", () => {
     await expect(cleanup.getByText("4 tasks to review")).toBeVisible();
   });
 
-  test("a meeting: event, transcript with names, find, rename a speaker", async ({ page }) => {
-    await page.goto("/meetings");
+  test("a recording: event, transcript with names, find, rename a speaker", async ({ page }) => {
+    await page.goto("/recordings");
     await page.getByRole("link", { name: /Northwind onboarding call/ }).click();
     await expect(page.getByRole("heading", { name: "Northwind onboarding call" })).toBeVisible();
     await expect(page.getByText("Matched by time (100% overlap).")).toBeVisible();
@@ -64,8 +64,8 @@ test.describe("signed in", () => {
     await expect(page.getByText("Nate").first()).toBeVisible();
   });
 
-  test("meetings can be found by words, attendee, device and date", async ({ page }) => {
-    await page.goto("/meetings");
+  test("recordings can be found by words, attendee, device and date", async ({ page }) => {
+    await page.goto("/recordings");
     await page.getByPlaceholder("Title or words said").fill("Okta");
     await page.getByRole("button", { name: "Search" }).click();
     await expect(page).toHaveURL(/q=Okta/);
@@ -73,18 +73,24 @@ test.describe("signed in", () => {
     await expect(page.getByRole("link", { name: /Platform standup/ })).toHaveCount(0);
     await expect(page.locator("mark", { hasText: "Okta" }).first()).toBeVisible();
 
-    await page.goto("/meetings?attendee=Jules");
+    await page.goto("/recordings?attendee=Jules");
     await expect(page.getByRole("link", { name: /lumen roadmap/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /Northwind onboarding call/ })).toHaveCount(0);
 
-    await page.goto("/meetings?device=win-desktop&q=timeline");
-    await expect(page.getByText("No meetings match")).toBeVisible();
+    await page.goto("/recordings?device=win-desktop&q=timeline");
+    await expect(page.getByText("No recordings match")).toBeVisible();
     await page.getByRole("link", { name: "Clear the search" }).click();
     await expect(page.getByRole("link", { name: /Platform standup/ })).toBeVisible();
+    // The old address still works, and the list can show just what hasn't been opened.
+    await page.goto("/meetings");
+    await expect(page).toHaveURL(/\/recordings$/);
+    await page.getByRole("link", { name: /^To review/ }).first().click();
+    await expect(page).toHaveURL(/show=new/);
+    await expect(page.getByText("Transcribed, and not opened yet.")).toBeVisible();
   });
 
-  test("a meeting can be linked to another event by hand and back", async ({ page }) => {
-    await page.goto("/meetings?unmatched=1");
+  test("a recording can be linked to another event by hand and back", async ({ page }) => {
+    await page.goto("/recordings?show=unmatched");
     await page.getByRole("link", { name: /Quick call/ }).click();
     await expect(page.getByText("No event overlapped this recording enough to match.")).toBeVisible();
     const pick = page.getByLabel("Calendar event");
@@ -96,7 +102,7 @@ test.describe("signed in", () => {
   });
 
   test("export as Markdown", async ({ page }) => {
-    await page.goto("/meetings");
+    await page.goto("/recordings");
     await page.getByRole("link", { name: /lumen roadmap/ }).click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Markdown" }).click()]);
     const body = await (await download.createReadStream()).toArray();
@@ -107,8 +113,8 @@ test.describe("signed in", () => {
     expect(md).toContain("## Shared screens\n\n`4:12`\n\nlumen · Next release");
   });
 
-  test("a meeting's shared screens: the picture, its text, and a jump to that moment", async ({ page }) => {
-    await page.goto("/meetings");
+  test("a recording's shared screens: the picture, its text, and a jump to that moment", async ({ page }) => {
+    await page.goto("/recordings");
     await page.getByRole("link", { name: /lumen roadmap/ }).click();
     await page.getByRole("tab", { name: /Shared screens/ }).click();
     const shot = page.getByRole("img", { name: "Screen at 4:12" });
@@ -151,20 +157,20 @@ test.describe("signed in", () => {
     await expect(page.getByRole("button", { name: "Send", exact: true }).first()).toBeDisabled();
   });
 
-  test("search shows matching lines with speakers and links into the meeting", async ({ page }) => {
+  test("search shows matching lines with speakers and links into the recording", async ({ page }) => {
     await page.goto("/search?q=Stripe%20webhook");
-    await expect(page.getByText("1 meeting matching")).toBeVisible();
+    await expect(page.getByText("1 recording matching")).toBeVisible();
     const line = page.getByRole("link", { name: /Alex.*Stripe webhook bug/ });
     await expect(line.locator("mark").first()).toBeVisible();
     await line.click();
-    await expect(page).toHaveURL(/\/meetings\/[0-9a-f-]+\?q=Stripe%20webhook&t=\d+/);
+    await expect(page).toHaveURL(/\/recordings\/[0-9a-f-]+\?q=Stripe%20webhook&t=\d+/);
     await expect(page.getByRole("heading", { name: "lumen roadmap" })).toBeVisible();
   });
 
   test("the calendar context filter narrows every page", async ({ page }) => {
     await page.getByRole("button", { name: "lumen" }).click();
     await expect(page.getByRole("button", { name: "lumen" })).toHaveClass(/bg-accent /);
-    await page.goto("/meetings");
+    await page.goto("/recordings");
     await expect(page.getByText("lumen roadmap")).toBeVisible();
     await expect(page.getByText("Northwind onboarding call")).toHaveCount(0);
     // The seed puts these three days either side of today, so look at each day rather than this week.
@@ -286,8 +292,8 @@ test.describe("signed in", () => {
     await expect(page.getByText(/Set by DEBRIEF_PASSWORD in the environment/)).toBeVisible();
   });
 
-  test("meetings: what's still transcribing shows above the list, and a recording can be deleted", async ({ page }) => {
-    await page.goto("/meetings");
+  test("recordings: what's still transcribing shows above the list, and a recording can be deleted", async ({ page }) => {
+    await page.goto("/recordings");
     const queue = page.getByRole("region", { name: "In progress" });
     await expect(queue.getByText("API v2 design review")).toBeVisible();
     await expect(queue.getByText("Transcribing")).toBeVisible();
@@ -297,11 +303,11 @@ test.describe("signed in", () => {
     await expect(page.getByText("Deleted.")).toBeVisible();
     await expect(queue.getByRole("button", { name: /^Delete Recording from/ })).toHaveCount(0);
 
-    // A finished meeting, from its own page.
+    // A finished recording, from its own page.
     await page.getByRole("link", { name: /Quick call/ }).click();
     page.once("dialog", (d) => d.accept());
     await page.getByRole("button", { name: "Delete Quick call" }).click();
-    await expect(page).toHaveURL(/\/meetings$/);
+    await expect(page).toHaveURL(/\/recordings$/);
     await expect(page.getByRole("link", { name: /Quick call/ })).toHaveCount(0);
   });
 });

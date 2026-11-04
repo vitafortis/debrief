@@ -187,7 +187,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           </>
                         );
                         return e.transcriptId ? (
-                          <Link key={e.id} href={`/meetings/${e.transcriptId}`} className={cls} style={style} title={`${e.title} — ${STATUS_LABEL[e.status]}`}>
+                          <Link key={e.id} href={`/recordings/${e.transcriptId}`} className={cls} style={style} title={`${e.title} — ${STATUS_LABEL[e.status]}`}>
                             {inner}
                           </Link>
                         ) : (

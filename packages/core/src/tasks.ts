@@ -165,7 +165,7 @@ export function akiflowPayload(
   task: typeof tasks.$inferSelect,
   meeting: { title: string; recordedAt: Date; transcriptId: string }
 ) {
-  const link = linkTo(`/meetings/${meeting.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`);
+  const link = linkTo(`/recordings/${meeting.transcriptId}${task.sourceStart != null ? `?t=${Math.floor(task.sourceStart)}` : ""}`);
   const description = [
     `From ${meeting.title} ${fmtDate(meeting.recordedAt)}${task.details ? ` — ${task.details}` : ""}`,
     task.assignee ? `Owner: ${task.assignee}` : null,
@@ -283,7 +283,7 @@ export async function pushTask(db: Db, id: string, destination?: TaskDestination
     if (dest === "akiflow") {
       result = await pushToAkiflow(akiflowPayload(task, ref));
     } else {
-      const link = linkTo(`/meetings/${task.transcriptId}`);
+      const link = linkTo(`/recordings/${task.transcriptId}`);
       const issue = await createLinearIssue({
         title: task.description,
         description: [

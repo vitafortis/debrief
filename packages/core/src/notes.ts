@@ -21,7 +21,7 @@ const isoDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: tz(), y
 const minutes = (s: number | null) => (s ? `${Math.max(1, Math.round(s / 60))} min` : null);
 const DEST = { akiflow: "Akiflow", linear: "Linear" } as const;
 
-export const meetingUrl = (id: string) => (publicUrl() ? `${publicUrl()}/meetings/${id}` : null);
+export const meetingUrl = (id: string) => (publicUrl() ? `${publicUrl()}/recordings/${id}` : null);
 
 /** The meeting as Markdown: when, who, summary, action items and the transcript. */
 export function meetingMarkdown(m: Meeting) {

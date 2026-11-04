@@ -31,7 +31,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     <div>
       <PageHeader
         title="Tasks"
-        description="Action items from your meetings. Review them, then send them to Akiflow or Linear."
+        description="Action items from your recordings. Review them, then send them to Akiflow or Linear."
         actions={
           <div className="flex rounded-xl bg-muted p-0.5 text-xs font-medium">
             {TABS.map((t) => (
@@ -66,7 +66,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
           <EmptyState
             icon={ListChecks}
             title={status === "pending" ? "Nothing to review" : `No ${TABS.find((t) => t.key === status)!.label.toLowerCase()} tasks`}
-            body={status === "pending" ? "New action items appear here after a meeting is summarized." : undefined}
+            body={status === "pending" ? "New action items appear here after a recording is summarized." : undefined}
           />
         )}
       </div>

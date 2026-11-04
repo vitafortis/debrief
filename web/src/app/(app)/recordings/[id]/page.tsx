@@ -18,10 +18,10 @@ const load = async (id: string) => (/^[0-9a-f-]{36}$/i.test(id) ? getMeeting(db(
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const m = await load((await params).id);
-  return { title: m?.displayTitle ?? "Meeting" };
+  return { title: m?.displayTitle ?? "Recording" };
 }
 
-export default async function MeetingPage({ params, searchParams }: Props) {
+export default async function RecordingPage({ params, searchParams }: Props) {
   const { id } = await params;
   const sp = await searchParams;
   const m = await load(id);
@@ -49,8 +49,8 @@ export default async function MeetingPage({ params, searchParams }: Props) {
       <div className="relative shrink-0">
         <div className="glow-top pointer-events-none absolute inset-x-0 -top-10 h-64" />
         <header className="relative px-4 pt-5 pb-5 md:px-8 md:pt-6">
-          <Link href="/meetings" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-3" /> Meetings
+          <Link href="/recordings" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="size-3" /> Recordings
           </Link>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -62,15 +62,15 @@ export default async function MeetingPage({ params, searchParams }: Props) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a href={`/api/meetings/${m.transcript.id}/export?format=md`} className="btn btn-secondary btn-sm">
+              <a href={`/api/recordings/${m.transcript.id}/export?format=md`} className="btn btn-secondary btn-sm">
                 <Download /> Markdown
               </a>
-              <a href={`/api/meetings/${m.transcript.id}/export?format=txt`} className="btn btn-ghost btn-sm">
+              <a href={`/api/recordings/${m.transcript.id}/export?format=txt`} className="btn btn-ghost btn-sm">
                 Text
               </a>
               {slackConfigured() && <SlackButton transcriptId={m.transcript.id} sentAt={m.transcript.notifiedAt?.toISOString() ?? null} />}
               {!busy && <RetryButton recordingId={m.recording.id} ghost />}
-              <DeleteButton recordingId={m.recording.id} title={m.displayTitle} then="/meetings" compact />
+              <DeleteButton recordingId={m.recording.id} title={m.displayTitle} then="/recordings" compact />
             </div>
           </div>
         </header>

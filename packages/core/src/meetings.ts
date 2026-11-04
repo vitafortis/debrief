@@ -56,6 +56,8 @@ export type MeetingFilter = {
   device?: string | null;
   /** Part of an attendee's name or email. */
   attendee?: string | null;
+  /** Only ones not opened yet ("new"), or only ones that have been. */
+  review?: "new" | "reviewed" | null;
   limit?: number;
   offset?: number;
 };
@@ -77,6 +79,8 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
     );
   }
   if (f.device) where.push(eq(recordings.device, f.device));
+  if (f.review === "new") where.push(sql`${transcripts.viewedAt} is null`);
+  else if (f.review === "reviewed") where.push(sql`${transcripts.viewedAt} is not null`);
   const attendee = f.attendee?.trim();
   if (attendee) {
     where.push(sql`exists (
@@ -88,6 +92,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
     .select({
       id: transcripts.id,
       recordingId: recordings.id,
+      viewedAt: transcripts.viewedAt,
       title: transcripts.title,
       summary: transcripts.summary,
       recordedAt: recordings.recordedAt,
