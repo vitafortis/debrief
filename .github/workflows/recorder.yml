@@ -77,6 +77,10 @@ jobs:
         run: |
           echo '{"version":"${{ needs.version.outputs.version }}"}' > version.json
           pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config version.json
+      # Without this entitlement the hardened runtime gives the app silence instead of the microphone, and never asks.
+      - name: Check the microphone entitlement
+        if: runner.os == 'macOS'
+        run: codesign -d --entitlements - --xml "src-tauri/target/universal-apple-darwin/release/bundle/macos/Debrief Recorder.app" | grep -q com.apple.security.device.audio-input
       # The same file names every release, so releases/latest/download/<name> always works (Settings → Devices & keys links there).
       - name: Name the installer
         working-directory: .
