@@ -90,6 +90,8 @@ impl Recording {
         let mic_name = microphone.to_string();
         let capture = std::thread::Builder::new().name("capture".into()).spawn(move || {
             let mut warnings = Vec::new();
+            #[cfg(target_os = "macos")]
+            warnings.extend(mic_permission());
             let mut mic = match Mic::open(&mic_name, tx.clone()) {
                 Ok(m) => m,
                 Err(e) => {
@@ -359,6 +361,29 @@ pub fn input_devices() -> Vec<String> {
 
 fn device_name(d: &cpal::Device) -> String {
     d.description().map(|x| x.name().to_string()).unwrap_or_default()
+}
+
+/// macOS gives an app it hasn't allowed the microphone pure silence, not an
+/// error. The first time, ask (the stream that opens meanwhile is silent, and
+/// is opened again once allowed); once refused, say so.
+#[cfg(target_os = "macos")]
+fn mic_permission() -> Option<String> {
+    use cidre::av;
+    let audio = av::MediaType::audio();
+    match av::CaptureDevice::authorization_status_for_media_type(audio) {
+        Ok(av::AuthorizationStatus::Authorized) => None,
+        Ok(av::AuthorizationStatus::NotDetermined) => {
+            let mut answered = cidre::blocks::SendBlock::new1(|allowed: bool| log::info!("Microphone access {}", if allowed { "allowed" } else { "refused" }));
+            if let Err(e) = av::CaptureDevice::request_access_for_media_type_ch(audio, &mut answered) {
+                log::warn!("Couldn't ask for the microphone: {e:?}");
+            }
+            None
+        }
+        status => {
+            log::warn!("Microphone access: {status:?}");
+            Some("Debrief Recorder isn't allowed to use the microphone, so your side is silent. Allow it in System Settings → Privacy & Security → Microphone.".into())
+        }
+    }
 }
 
 /// The microphone stream, and what's needed to tell when it has stopped working.
