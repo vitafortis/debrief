@@ -7,6 +7,7 @@
 use super::mac::wait;
 use super::VIDEO_DIR;
 use anyhow::{anyhow, Result};
+use cidre::sc::{RecordingOutputDelegate, RecordingOutputDelegateImpl};
 use cidre::{arc, cg, cm, define_obj_type, ns, objc, sc};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,12 +19,12 @@ const MAX_WIDTH: f64 = 1920.0;
 /// Recordings that have finished writing (or failed), counted so a stop can wait for its file.
 static ENDED: AtomicU64 = AtomicU64::new(0);
 
-define_obj_type!(Ended + sc::RecordingOutputDelegateImpl, (), DEBRIEF_RECORDING_DELEGATE);
+define_obj_type!(Ended + RecordingOutputDelegateImpl, (), DEBRIEF_RECORDING_DELEGATE);
 
-impl sc::RecordingOutputDelegate for Ended {}
+impl RecordingOutputDelegate for Ended {}
 
 #[objc::add_methods]
-impl sc::RecordingOutputDelegateImpl for Ended {
+impl RecordingOutputDelegateImpl for Ended {
     extern "C" fn impl_recording_output_did_fail_with_err(&mut self, _cmd: Option<&objc::Sel>, _output: &mut sc::RecordingOutput, error: &ns::Error) {
         log::warn!("The window video stopped: {error:?}");
         ENDED.fetch_add(1, Ordering::SeqCst);

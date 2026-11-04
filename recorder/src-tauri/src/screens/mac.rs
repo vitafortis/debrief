@@ -4,7 +4,6 @@
 
 use super::{is_call_title, Frame};
 use anyhow::{anyhow, Context, Result};
-use cidre::objc::Obj;
 use cidre::{arc, cv, sc};
 use std::future::Future;
 use std::sync::Arc;
