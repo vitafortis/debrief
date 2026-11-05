@@ -432,3 +432,33 @@ test("deleting a recording removes its audio, screens, video, archive copy, expo
     for (const d of [local, nas, out]) fs.rmSync(d, { recursive: true, force: true });
   }
 });
+
+test("Google accounts: several connect, one connected before moves over with its calendars, and disconnect", { skip }, async () => {
+  const s = await import("../src/settings");
+  const g = await import("../src/calendar-sync");
+  const db = core!.getDb();
+  // Connected before there could be several: kept as GOOGLE_CREDENTIALS, its calendars with no account.
+  await s.saveSettings(db, { GOOGLE_CREDENTIALS: JSON.stringify({ type: "authorized_user", client_id: "c", client_secret: "s", refresh_token: "old", account: "sam@example.com" }) });
+  const [cal] = await db.insert(core!.calendars).values({ source: "google", externalId: "sam@example.com", name: "Sam" }).returning();
+
+  await g.saveGoogleAccount(db, "lee@example.com", "lee-1");
+  assert.deepEqual(g.googleAccounts().map((a) => a.account), ["lee@example.com"]);
+  assert.ok(s.setting("GOOGLE_CREDENTIALS"), "another account leaves the old one where it is");
+
+  await g.saveGoogleAccount(db, "sam@example.com", "sam-2");
+  assert.deepEqual(g.googleAccounts().map((a) => [a.account, a.refresh_token]), [["lee@example.com", "lee-1"], ["sam@example.com", "sam-2"]]);
+  assert.equal(s.setting("GOOGLE_CREDENTIALS"), "", "connecting it again moves it");
+  const [moved] = await db.select().from(core!.calendars).where(sql`id = ${cal.id}`);
+  assert.equal(moved.googleAccount, "sam@example.com");
+
+  await g.saveGoogleAccount(db, "lee@example.com", "lee-2");
+  assert.deepEqual(g.googleAccounts().map((a) => [a.account, a.refresh_token]), [["sam@example.com", "sam-2"], ["lee@example.com", "lee-2"]]);
+
+  await g.removeGoogleAccount(db, "lee@example.com");
+  assert.deepEqual(g.googleAccounts().map((a) => a.account), ["sam@example.com"]);
+  await assert.rejects(g.googleAuth("lee@example.com"), /isn't connected any more/);
+
+  await db.delete(core!.calendars).where(sql`id = ${cal.id}`);
+  await db.execute(sql`delete from settings`);
+  await s.loadSettings(db);
+});

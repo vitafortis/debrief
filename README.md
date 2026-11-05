@@ -188,6 +188,8 @@ In Settings → Calendars, choose **Add a calendar**. It walks you through three
 3. Under [Clients](https://console.cloud.google.com/auth/clients) → **Create client** → **Web application**, add the redirect URI `https://debrief.example.com/api/google/callback` (your address). Google only accepts https:// here, except for localhost.
 4. Paste the client ID and secret into Debrief, then **Connect Google**.
 
+To add calendars from another Google account, choose **Google, sign in** again and **Connect another Google account**: Google asks which account to use, and each calendar keeps syncing through the account it was added with. An app with an **Internal** audience only lets in accounts from its own Workspace; for a Gmail account or another company's, the app has to be **External**.
+
 **Google, service account.** For calendars you'd rather share one by one.
 
 1. In the same Google Cloud project, create a service account under **IAM & Admin → Service accounts**, then **Keys → Add key → JSON**, and upload that file.

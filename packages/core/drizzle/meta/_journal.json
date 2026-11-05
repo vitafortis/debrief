@@ -50,6 +50,13 @@
       "when": 1793674569536,
       "tag": "0006_crazy_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793886795837,
+      "tag": "0007_left_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

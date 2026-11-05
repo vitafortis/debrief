@@ -45,6 +45,8 @@ export const calendars = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     source: text("source").notNull(), // 'google' | 'ics'
     externalId: text("external_id").notNull(), // Google calendar id, or the ICS feed URL
+    // The connected Google account it syncs through (its email); null uses GOOGLE_CREDENTIALS.
+    googleAccount: text("google_account"),
     name: text("name").notNull(),
     context: text("context").notNull().default("default"),
     // Where approved tasks from this calendar's meetings go unless chosen per task.

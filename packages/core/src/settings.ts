@@ -60,6 +60,7 @@ export const SETTINGS: SettingDef[] = [
   // Calendars
   { key: "GOOGLE_OAUTH_CLIENT_ID", group: "calendars", label: "OAuth client ID", type: "text", placeholder: "1234…apps.googleusercontent.com", hidden: true },
   { key: "GOOGLE_OAUTH_CLIENT_SECRET", group: "calendars", label: "OAuth client secret", type: "secret", hidden: true },
+  { key: "GOOGLE_ACCOUNTS", group: "calendars", label: "Connected Google accounts", type: "secret", hidden: true },
   { key: "GOOGLE_CREDENTIALS", group: "calendars", label: "Google credentials", type: "textarea", placeholder: '{ "type": "service_account", … }', help: "Set when you connect Google. Or a service account's JSON key, or gcloud's application_default_credentials.json.", advanced: true },
   { key: "POLL_INTERVAL_SECONDS", group: "calendars", label: "Sync every (seconds)", type: "number", default: "300", advanced: true },
   { key: "SYNC_DAYS_BACK", group: "calendars", label: "Days back", type: "number", default: "30", advanced: true },
