@@ -294,7 +294,8 @@ fn refresh_tray(app: &AppHandle) {
             let _ = t.status.set_text(&label);
             let _ = t.toggle.set_text(if recording { "Stop recording" } else { "Start recording" });
             let _ = t.uploads.set_text(&uploads);
-            let _ = t.icon.set_icon(Some(icons::tray(recording, warn)));
+            let (icon, template) = icons::tray(recording, warn);
+            let _ = t.icon.set_icon_with_as_template(Some(icon), template);
             let _ = t.icon.set_tooltip(Some(&label));
         }
         drop(tray);
@@ -333,8 +334,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit Debrief Recorder", true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
     let menu = Menu::with_items(app, &[&status, &toggle, &sep()?, &uploads, &open, &folder, &sep()?, &update, &settings, &quit])?;
+    let (image, template) = icons::tray(false, false);
     let icon = TrayIconBuilder::with_id("main")
-        .icon(icons::tray(false, false))
+        .icon(image)
+        .icon_as_template(template)
         .tooltip("Debrief Recorder")
         .menu(&menu)
         .show_menu_on_left_click(true)
