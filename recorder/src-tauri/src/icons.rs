@@ -1,6 +1,8 @@
 //! Tray icons, drawn here so they stay crisp: the Debrief logo (seven bars,
 //! dark blue to light), and a red disc with the same bars in white while
 //! recording. An amber dot in the corner when uploads can't go through.
+//! On the Mac the logo is a template instead, flat like the system's own
+//! icons: macOS paints it white or black to suit the menu bar, dot and all.
 
 use tauri::image::Image;
 
@@ -28,7 +30,9 @@ fn coverage_round_rect(x: f32, y: f32, cx: f32, cy: f32, hw: f32, hh: f32) -> f3
 /// Where the warning dot sits, and its radius, in pixels.
 const WARN: (f32, f32, f32) = (SIZE as f32 - 8.0, SIZE as f32 - 8.0, 7.5);
 
-pub fn tray(recording: bool, warn: bool) -> Image<'static> {
+/// The icon, and whether it's a template for macOS to colour.
+pub fn tray(recording: bool, warn: bool) -> (Image<'static>, bool) {
+    let template = cfg!(target_os = "macos") && !recording;
     let mut px = vec![0u8; (SIZE * SIZE * 4) as usize];
     let c = SIZE as f32 / 2.0;
     // Logo units to pixels: the full icon, or smaller to sit inside the disc.
@@ -56,7 +60,7 @@ pub fn tray(recording: bool, warn: bool) -> Image<'static> {
                 px[o + 2] = (b + (255.0 - b) * bar) as u8;
                 px[o + 3] = (disc * 255.0) as u8;
             } else {
-                px[o..o + 3].copy_from_slice(&rgb);
+                px[o..o + 3].copy_from_slice(if template { &[0; 3] } else { &rgb });
                 px[o + 3] = (bar * 255.0) as u8;
             }
             if warn {
@@ -66,12 +70,13 @@ pub fn tray(recording: bool, warn: bool) -> Image<'static> {
                 let dot = (WARN.2 - d + 0.5).clamp(0.0, 1.0);
                 let a = px[o + 3] as f32 / 255.0 * (1.0 - gap);
                 let out = a * (1.0 - dot) + dot;
-                for (i, amber) in [0xf5u8, 0xa5, 0x24].into_iter().enumerate() {
+                let dot_rgb = if template { [0; 3] } else { [0xf5u8, 0xa5, 0x24] };
+                for (i, amber) in dot_rgb.into_iter().enumerate() {
                     px[o + i] = if out > 0.0 { ((px[o + i] as f32 * a * (1.0 - dot) + amber as f32 * dot) / out) as u8 } else { 0 };
                 }
                 px[o + 3] = (out * 255.0) as u8;
             }
         }
     }
-    Image::new_owned(px, SIZE, SIZE)
+    (Image::new_owned(px, SIZE, SIZE), template)
 }
