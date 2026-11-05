@@ -104,14 +104,18 @@ function renderUpdates(u) {
   t.className = "small muted";
   if (u.state === "dev") t.textContent = "A development build, so it doesn't check for updates.";
   else if (u.state === "checking") t.textContent = "Checking…";
-  else if (u.available) t.textContent = `${u.available.version} is available.`;
+  else if (u.state === "installing") t.textContent = `Installing ${u.available.version}. The recorder restarts when it's done.`;
   else if (u.state === "failed") {
     t.textContent = u.error ?? "Couldn't check for updates.";
     t.className = "small note err";
-  } else if (u.state === "done") t.textContent = "Up to date.";
+  } else if (u.available) t.textContent = `${u.available.version} is available.`;
+  else if (u.state === "done") t.textContent = "Up to date.";
   else t.textContent = "";
-  $("update-check").disabled = u.state === "dev" || u.state === "checking";
-  $("update-download").style.display = u.available ? "" : "none";
+  $("update-check").disabled = u.state === "dev" || u.state === "checking" || u.state === "installing";
+  const b = $("update-download");
+  b.style.display = u.available ? "" : "none";
+  b.disabled = u.state === "installing";
+  b.textContent = u.self_update ? "Install and restart" : "Download";
 }
 
 async function poll() {
@@ -223,7 +227,18 @@ $("update-check").addEventListener("click", async () => {
     $("update-text").className = "small note err";
   }
 });
-$("update-download").addEventListener("click", () => invoke("download_update"));
+$("update-download").addEventListener("click", async () => {
+  const u = (await invoke("status")).updates;
+  if (u.self_update) renderUpdates({ ...u, state: "installing" });
+  try {
+    await invoke("install_update_now");
+    renderUpdates((await invoke("status")).updates);
+  } catch (e) {
+    renderUpdates((await invoke("status")).updates);
+    $("update-text").textContent = String(e);
+    $("update-text").className = "small note err";
+  }
+});
 for (const id of [...FIELDS, ...NUMS, ...BOOLS, "microphone"]) $(id).addEventListener("input", markDirty);
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "s") {
