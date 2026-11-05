@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, Rewind, FastForward, Search, X, LocateFixed, Monitor } from "lucide-react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pause, Play, Rewind, FastForward, Search, X, LocateFixed, Monitor, Video, VideoOff } from "lucide-react";
 import type WaveSurfer from "wavesurfer.js";
 import type { SpeakerSegment } from "@debrief/core/schema";
 import { clock, speakerLabel } from "@/lib/time";
@@ -53,10 +53,81 @@ function Screens({ screens, terms, seek }: { screens: ScreenView[]; terms: strin
 }
 
 /**
+ * The meeting window as it looked at the audio's current time: a muted video
+ * kept in step with the audio. Each video starts when the window was first
+ * seen (or changed), so between them there may be nothing to show.
+ */
+function WindowVideo({
+  recordingId,
+  starts,
+  audio,
+  time,
+  playing,
+  rate,
+}: {
+  recordingId: string;
+  starts: number[];
+  audio: RefObject<HTMLAudioElement | null>;
+  time: number;
+  playing: boolean;
+  rate: number;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [lengths, setLengths] = useState<Record<number, number>>({});
+  const ms = starts.findLast((s) => s / 1000 <= time + 0.05);
+  const start = ms == null ? 0 : ms / 1000;
+  const length = ms == null ? undefined : lengths[ms];
+  const showing = ms != null && (length == null || time - start <= length + 0.5);
+
+  // Keeps the picture where the audio is: after a seek, or when they drift apart.
+  const align = useCallback(() => {
+    const v = ref.current;
+    if (!v || !showing || v.readyState < 1) return;
+    const want = (audio.current?.currentTime ?? time) - start;
+    if (Math.abs(v.currentTime - want) > 0.4) v.currentTime = Math.max(0, want);
+  }, [audio, time, start, showing]);
+  useEffect(align, [align]);
+
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || !showing) return;
+    v.playbackRate = rate;
+    if (playing) v.play().catch(() => {});
+    else v.pause();
+  }, [playing, rate, showing, ms]);
+
+  return (
+    <div className="relative flex aspect-video max-h-[45dvh] w-full items-center justify-center overflow-hidden rounded-md bg-black">
+      {showing ? (
+        <video
+          key={ms}
+          ref={ref}
+          src={`/api/recordings/${recordingId}/video/${ms}`}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-contain"
+          onLoadedMetadata={(e) => {
+            const d = e.currentTarget.duration;
+            if (Number.isFinite(d)) setLengths((l) => ({ ...l, [ms]: d }));
+            align();
+          }}
+        />
+      ) : (
+        <p className="flex items-center gap-2 px-4 text-center text-xs text-white/60">
+          <VideoOff className="size-4 shrink-0" />
+          {ms == null ? "The meeting window wasn't showing yet." : "The meeting window wasn't showing here."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The audio player and the transcript beside it: the line being spoken is
  * highlighted and kept in view, clicking a line seeks there, and the find box
  * marks and steps through matches. Shared screens, when there are any, are a
- * second tab.
+ * second tab; a video of the meeting window, when there is one, plays above.
  */
 export function MeetingPlayer({
   recordingId,
@@ -67,6 +138,7 @@ export function MeetingPlayer({
   initialTime,
   initialQuery,
   screens = [],
+  videoStarts = [],
 }: {
   recordingId: string;
   segments: SpeakerSegment[];
@@ -76,6 +148,7 @@ export function MeetingPlayer({
   initialTime?: number;
   initialQuery?: string;
   screens?: ScreenView[];
+  videoStarts?: number[];
 }) {
   const [tab, setTab] = useState<"transcript" | "screens">("transcript");
   const waveRef = useRef<HTMLDivElement>(null);
@@ -90,6 +163,7 @@ export function MeetingPlayer({
   const [query, setQuery] = useState(initialQuery ?? "");
   const [hit, setHit] = useState(0);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [showVideo, setShowVideo] = useState(true);
   const duration = durationSecs ?? segments.at(-1)?.end ?? 0;
 
   const speakers = useMemo(() => [...new Set(segments.map((s) => s.speaker).filter(Boolean))] as string[], [segments]);
@@ -232,6 +306,11 @@ export function MeetingPlayer({
     <div className="card flex min-h-0 flex-col overflow-hidden">
       <div className="border-b border-border bg-surface/60 p-4">
         <audio ref={audioRef} src={`/api/audio/${recordingId}`} preload="metadata" />
+        {videoStarts.length > 0 && showVideo && (
+          <div className="mb-3">
+            <WindowVideo recordingId={recordingId} starts={videoStarts} audio={audioRef} time={time} playing={playing} rate={rate} />
+          </div>
+        )}
         <div ref={waveRef} className="w-full cursor-pointer" aria-label="Waveform" />
         {audioError && <p className="mt-2 text-xs text-danger">{audioError}</p>}
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -262,6 +341,16 @@ export function MeetingPlayer({
             <LocateFixed />
             Follow
           </button>
+          {videoStarts.length > 0 && (
+            <button
+              className={`btn btn-sm ${showVideo ? "btn-secondary text-primary" : "btn-ghost"}`}
+              onClick={() => setShowVideo(!showVideo)}
+              title="Show the meeting window as it was"
+            >
+              <Video />
+              Video
+            </button>
+          )}
           <div className="relative ml-auto w-full sm:w-64">
             <Search className="absolute top-2 left-2.5 size-3.5 text-muted-foreground" />
             <input

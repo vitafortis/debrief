@@ -159,6 +159,7 @@ export default async function RecordingPage({ params, searchParams }: Props) {
             initialTime={sp.t ? Number(sp.t) || 0 : undefined}
             initialQuery={sp.q}
             screens={m.screens}
+            videoStarts={m.videoStarts}
           />
         </div>
       </div>

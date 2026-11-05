@@ -17,6 +17,7 @@ import {
   type TaskDestination,
 } from "./schema";
 import { overlapScore, matchThreshold } from "./correlate";
+import { listVideos } from "./storage";
 import { HL_END, HL_START } from "./search";
 
 /** What a meeting is called: a title set by hand, its calendar event's, the recorder's, or the date. */
@@ -176,6 +177,7 @@ export async function getMeeting(db: Db, transcriptId: string) {
     .from(screens)
     .where(eq(screens.recordingId, row.recording.id))
     .orderBy(asc(screens.atSecs));
+  const videos = await listVideos(row.recording.filePath).catch(() => []);
   const event = events[0] ?? null;
   return {
     ...row,
@@ -185,6 +187,8 @@ export async function getMeeting(db: Db, transcriptId: string) {
     tasks: taskRows,
     /** What was presented on screen, with the text read from it. */
     screens: screenRows,
+    /** Videos of the meeting window, by when in the recording each starts. */
+    videoStarts: videos.map((v) => v.ms),
     context: event?.context ?? device?.context ?? null,
     /** Where this meeting's tasks go unless chosen per task. */
     defaultDestination: event?.defaultDestination ?? device?.defaultDestination ?? "akiflow",

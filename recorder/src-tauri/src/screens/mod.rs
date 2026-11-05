@@ -2,10 +2,13 @@
 //! looked at every few seconds; a frame that holds still and differs from the
 //! last one kept (a slide or a document someone is presenting, not a grid of
 //! moving faces) is saved as a JPEG beside the audio. Debrief reads the text
-//! from those and keeps the ones that have some.
+//! from those and keeps the ones that have some. On macOS 15 and later the
+//! window is also recorded as video (see video_mac.rs).
 
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_os = "macos")]
+mod video_mac;
 #[cfg(windows)]
 mod win;
 
@@ -16,6 +19,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 pub const DIR: &str = "screens";
+pub const VIDEO_DIR: &str = "video";
 const EVERY: Duration = Duration::from_secs(3);
 /// Frames are compared as 64×36 greyscale thumbnails, by mean difference (0–255).
 const THUMB_W: usize = 64;
@@ -47,16 +51,40 @@ pub fn is_call_title(title: &str) -> bool {
     CALL_TITLES.iter().any(|c| t.contains(c))
 }
 
+#[cfg(target_os = "macos")]
+use video_mac::Video;
+
+/// Video isn't recorded here yet.
+#[cfg(not(target_os = "macos"))]
+enum Video {}
+
+#[cfg(not(target_os = "macos"))]
+impl Video {
+    fn new(_: &Path) -> Option<Self> {
+        None
+    }
+}
+
 /// The meeting window right now, if it's showing (not minimized, not a browser on another tab).
-fn grab(name: &str, id: &str) -> Result<Option<Frame>> {
+/// `video`, when there is one, follows it: `ms` is when in the recording that is.
+fn grab(name: &str, id: &str, video: Option<&mut Video>, ms: u64) -> Result<Option<Frame>> {
     let browser = is_browser(name, id);
     #[cfg(target_os = "macos")]
-    return mac::grab(id, browser);
+    {
+        let window = mac::find(id, browser)?;
+        if let Some(v) = video {
+            v.follow(window.as_deref(), ms);
+        }
+        return window.map_or(Ok(None), |w| mac::capture(&w));
+    }
     #[cfg(windows)]
-    return win::grab(id, browser);
+    {
+        let _ = (video, ms);
+        return win::grab(id, browser);
+    }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
-        let _ = browser;
+        let _ = (browser, video, ms);
         Ok(None)
     }
 }
@@ -107,20 +135,30 @@ fn save(f: &Frame, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The saved frames of a recording, oldest first: <dir>/screens/<ms>.jpg.
-pub fn list(recording_dir: &Path) -> Vec<(u64, PathBuf)> {
-    let mut out: Vec<(u64, PathBuf)> = std::fs::read_dir(recording_dir.join(DIR))
+/// Files named by their time in the recording, <dir>/<sub>/<ms><ext>, oldest first.
+fn timed(dir: &Path, ext: &str) -> Vec<(u64, PathBuf)> {
+    let mut out: Vec<(u64, PathBuf)> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|e| {
             let p = e.path();
-            let ms = p.file_name()?.to_str()?.strip_suffix(".jpg")?.parse().ok()?;
+            let ms = p.file_name()?.to_str()?.strip_suffix(ext)?.parse().ok()?;
             Some((ms, p))
         })
         .collect();
     out.sort();
     out
+}
+
+/// The saved frames of a recording, oldest first: <dir>/screens/<ms>.jpg.
+pub fn list(recording_dir: &Path) -> Vec<(u64, PathBuf)> {
+    timed(&recording_dir.join(DIR), ".jpg")
+}
+
+/// The finished videos of a recording, oldest first: <dir>/video/<ms>.mp4 (one being written isn't listed).
+pub fn videos(recording_dir: &Path) -> Vec<(u64, PathBuf)> {
+    timed(&recording_dir.join(VIDEO_DIR), ".mp4")
 }
 
 /// Looks at the meeting window until dropped.
@@ -131,17 +169,19 @@ pub struct Watcher {
 
 impl Watcher {
     /// `started` is when the audio began, so a frame's name is its time in the recording.
-    pub fn start(recording_dir: PathBuf, name: String, id: String, started: Instant) -> Self {
+    /// With `video`, the window is recorded too, where the system can.
+    pub fn start(recording_dir: PathBuf, name: String, id: String, started: Instant, video: bool) -> Self {
         let (stop, stopped) = bounded::<()>(1);
         let thread = std::thread::Builder::new()
             .name("screens".into())
             .spawn(move || {
                 let dir = recording_dir.join(DIR);
+                let mut video = if video { Video::new(&recording_dir) } else { None };
                 let (mut prev, mut kept): (Option<Vec<u8>>, Option<Vec<u8>>) = (None, None);
                 let mut saved = 0;
                 let mut last_error = String::new();
                 while let Err(crossbeam_channel::RecvTimeoutError::Timeout) = stopped.recv_timeout(EVERY) {
-                    let frame = match grab(&name, &id) {
+                    let frame = match grab(&name, &id, video.as_mut(), started.elapsed().as_millis() as u64) {
                         Ok(Some(f)) if f.width >= 64 && f.height >= 36 && f.bgra.len() >= f.stride * f.height => f,
                         Ok(_) => {
                             prev = None;
@@ -173,6 +213,7 @@ impl Watcher {
                     }
                     prev = Some(t);
                 }
+                drop(video);
                 if saved > 0 {
                     log::info!("Kept {saved} screens of {name}");
                 }
@@ -217,6 +258,17 @@ mod tests {
         assert_eq!(l.iter().map(|(ms, _)| *ms).collect::<Vec<_>>(), vec![1500, 4000]);
         let big = image::open(&l[1].1).unwrap();
         assert_eq!((big.width(), big.height()), (MAX_WIDTH, 1080));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn videos_are_listed_once_finished() {
+        let dir = std::env::temp_dir().join(format!("video-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join(VIDEO_DIR)).unwrap();
+        for f in ["000090000.mp4", "000000500.mp4", "000120000.recording.mp4"] {
+            std::fs::write(dir.join(VIDEO_DIR).join(f), b"x").unwrap();
+        }
+        assert_eq!(videos(&dir).iter().map(|(ms, _)| *ms).collect::<Vec<_>>(), vec![500, 90_000]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -19,6 +19,9 @@ export const MAX_CHUNK = 32 * 1024 * 1024;
 export const MAX_SCREEN = 8 * 1024 * 1024;
 /** Shared screens sit beside the audio: <folder>/screens/<ms>.jpg. */
 export const SCREENS_DIR = "screens";
+/** And videos of the meeting window: <folder>/video/<ms>.mp4 (<ms>.mp4.part until all of it is here). */
+export const VIDEO_DIR = "video";
+export const MAX_VIDEO = 8 * 1024 * 1024 * 1024;
 
 export const uploadStart = z.object({
   device: z.string().trim().min(1).max(80),
@@ -145,26 +148,78 @@ export function appendUpload(db: Db, id: string, offset: number, body: ReadableS
     const file = resolveInRoot(root, path.join(u.folder, u.fileName));
     const size = await sizeOf(file);
     if (offset !== size) throw new UploadError("Offset doesn't match.", 409, size);
-
-    const src = body instanceof Readable ? body : Readable.fromWeb(body as never);
-    let written = 0;
-    const counter = new (await import("node:stream")).Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        written += chunk.length;
-        if (written > MAX_CHUNK) return cb(new UploadError(`Send at most ${MAX_CHUNK} bytes at a time.`, 413));
-        cb(null, chunk);
-      },
-    });
-    try {
-      await pipeline(src, counter, fs.createWriteStream(/*turbopackIgnore: true*/ file, { flags: "a" }));
-    } catch (err) {
-      // A cut-off chunk leaves a partial write: trim back so the next try lines up.
-      await fs.promises.truncate(/*turbopackIgnore: true*/ file, size).catch(() => {});
-      throw err instanceof UploadError ? err : new UploadError("The upload was interrupted.", 400, size);
-    }
-    const end = size + written;
+    const end = await appendAt(file, size, body, MAX_CHUNK);
     await db.update(uploads).set({ bytes: end, updatedAt: new Date() }).where(eq(uploads.id, id));
     return { offset: end };
+  });
+}
+
+/** Appends at most `max` bytes of the body to a file that is `size` long; returns where it now ends. */
+async function appendAt(file: string, size: number, body: ReadableStream<Uint8Array> | Readable, max: number) {
+  const src = body instanceof Readable ? body : Readable.fromWeb(body as never);
+  let written = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      written += chunk.length;
+      if (written > max) return cb(new UploadError(`Send at most ${max} bytes at a time.`, 413));
+      cb(null, chunk);
+    },
+  });
+  try {
+    await pipeline(src, counter, fs.createWriteStream(/*turbopackIgnore: true*/ file, { flags: "a" }));
+  } catch (err) {
+    // A cut-off chunk leaves a partial write: trim back so the next try lines up.
+    await fs.promises.truncate(/*turbopackIgnore: true*/ file, size).catch(() => {});
+    throw err instanceof UploadError ? err : new UploadError("The upload was interrupted.", 400, size);
+  }
+  return size + written;
+}
+
+/**
+ * Appends to a video of the meeting window, `ms` milliseconds into the
+ * recording, the same way as the audio: `offset` must be where Debrief's copy
+ * ends. `length` is the whole file's size; once that much is here, the video
+ * is kept. They come after the audio, so a finished recording takes them.
+ */
+export function appendVideo(
+  db: Db,
+  id: string,
+  ms: number,
+  offset: number,
+  length: number,
+  body: ReadableStream<Uint8Array> | Readable,
+  chunk: number | null,
+  root = recordingsDir()
+) {
+  return serialized(`${id}/video/${ms}`, async () => {
+    const [u] = await db.select().from(uploads).where(eq(uploads.id, id));
+    if (!u) throw new UploadError("No such upload. Start it first.", 404);
+    if (u.status === "deleted") throw new UploadError("This upload is finished.", 409);
+    if (!Number.isSafeInteger(ms) || ms < 0 || ms > 24 * 3600_000) throw new UploadError("The time must be milliseconds into the recording.", 400);
+    if (!Number.isSafeInteger(length) || length < 1) throw new UploadError("Send Upload-Length: the video's size in bytes.", 400);
+    if (length > MAX_VIDEO) throw new UploadError(`A video can be at most ${MAX_VIDEO} bytes.`, 413);
+    if (chunk !== null && chunk > MAX_CHUNK) throw new UploadError(`Send at most ${MAX_CHUNK} bytes at a time.`, 413);
+    const dir = resolveInRoot(root, path.join(u.folder, VIDEO_DIR));
+    const file = path.join(dir, `${String(ms).padStart(9, "0")}.mp4`);
+    // Already here: a retry after a lost reply.
+    const kept = await fs.promises.stat(/*turbopackIgnore: true*/ file).catch(() => null);
+    if (kept) return { offset: kept.size, done: true };
+    await fs.promises.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
+    const part = `${file}.part`;
+    const size = await sizeOf(part);
+    if (offset !== size) throw new UploadError("Offset doesn't match.", 409, size);
+    const end = await appendAt(part, size, body, Math.min(MAX_CHUNK, length - size));
+    if (end < length) return { offset: end, done: false };
+    const head = Buffer.alloc(8);
+    const fh = await fs.promises.open(/*turbopackIgnore: true*/ part, "r");
+    await fh.read(head, 0, 8, 0).finally(() => fh.close());
+    if (head.toString("latin1", 4, 8) !== "ftyp") {
+      await fs.promises.rm(/*turbopackIgnore: true*/ part, { force: true });
+      throw new UploadError("Send an MP4.", 415);
+    }
+    await fs.promises.rename(/*turbopackIgnore: true*/ part, file);
+    await db.update(uploads).set({ updatedAt: new Date() }).where(eq(uploads.id, id));
+    return { offset: end, done: true };
   });
 }
 

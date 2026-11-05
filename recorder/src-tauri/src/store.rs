@@ -31,6 +31,16 @@ pub struct Local {
     pub screens_sent: usize,
     #[serde(default)]
     pub screens_off: bool,
+    /// Debrief has all the audio and is transcribing it; the window videos go up after.
+    #[serde(default)]
+    pub audio_sent: bool,
+    /// Window videos Debrief has (they go up in order), bytes it has of the next one, and whether it takes them at all.
+    #[serde(default)]
+    pub videos_sent: usize,
+    #[serde(default)]
+    pub video_uploaded: u64,
+    #[serde(default)]
+    pub videos_off: bool,
 }
 
 pub const AUDIO: &str = "audio.opus";
@@ -50,6 +60,10 @@ impl Local {
             last_error: None,
             screens_sent: 0,
             screens_off: false,
+            audio_sent: false,
+            videos_sent: 0,
+            video_uploaded: 0,
+            videos_off: false,
         }
     }
 

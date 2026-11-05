@@ -13,6 +13,8 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 const CHUNK: u64 = 4 * 1024 * 1024;
+/// Under the 10 MB a Next.js proxy buffers of a request.
+const VIDEO_CHUNK: u64 = 8 * 1024 * 1024;
 /// While recording, wait for this much new audio (about 20 s) before sending.
 const LIVE_MIN: u64 = 128 * 1024;
 
@@ -52,6 +54,8 @@ fn configured(s: &Settings) -> bool {
 struct Offset {
     offset: Option<u64>,
     error: Option<String>,
+    #[serde(default)]
+    done: bool,
 }
 
 /// This build's version, set at startup. It goes in the user agent, so Settings → Recorder & devices shows what each key's recorder runs.
@@ -117,7 +121,7 @@ impl Client<'_> {
         });
         let mut res = self.agent.put(&self.url(l.id, "")).header("Authorization", &self.auth()).send_json(&body)?;
         let status = res.status().as_u16();
-        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None, done: false });
         if status != 200 {
             return Err(anyhow!("{status}: {}", o.error.unwrap_or_default()));
         }
@@ -139,7 +143,7 @@ impl Client<'_> {
             .header("Content-Type", "application/octet-stream")
             .send(&buf[..])?;
         let status = res.status().as_u16();
-        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None, done: false });
         match (status, o.offset) {
             (200, Some(n)) => Ok(n),
             (409, _) if o.error.as_deref().is_some_and(|e| e.contains("finished")) => Err(Finished.into()),
@@ -159,7 +163,7 @@ impl Client<'_> {
             .header("Content-Type", "image/jpeg")
             .send(&body[..])?;
         let status = res.status().as_u16();
-        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None, done: false });
         match status {
             200 => Ok(Sent::Taken),
             // An older Debrief, or a recording it has finished with or deleted.
@@ -172,11 +176,43 @@ impl Client<'_> {
         }
     }
 
+    /// Sends the part of a window video from `offset`; where Debrief's copy now ends, or that it has all of it.
+    fn video(&self, l: &Local, ms: u64, file: &Path, offset: u64, size: u64) -> Result<VideoSent> {
+        let len = size.saturating_sub(offset).min(VIDEO_CHUNK);
+        let mut f = std::fs::File::open(file)?;
+        f.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0u8; len as usize];
+        f.read_exact(&mut buf)?;
+        let mut res = self
+            .agent
+            .patch(&self.url(l.id, &format!("/video/{ms}")))
+            .header("Authorization", &self.auth())
+            .header("Upload-Offset", &offset.to_string())
+            .header("Upload-Length", &size.to_string())
+            .header("Content-Type", "application/octet-stream")
+            .send(&buf[..])?;
+        let status = res.status().as_u16();
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None, done: false });
+        match (status, o.offset) {
+            (200, _) if o.done => Ok(VideoSent::Done),
+            (200, Some(n)) => Ok(VideoSent::At(n)),
+            // Out of step (a lost reply, a retry): carry on from where the server is.
+            (409, Some(n)) if !o.error.as_deref().is_some_and(|e| e.contains("finished")) => Ok(VideoSent::At(n)),
+            // An older Debrief, or a recording it has deleted.
+            (404 | 405 | 409, _) => Ok(VideoSent::NotTaken),
+            (400 | 413 | 415, _) => {
+                log::warn!("Debrief refused video {ms} of {}: {}", l.id, o.error.unwrap_or_default());
+                Ok(VideoSent::Done)
+            }
+            (s, _) => Err(anyhow!("{s}: {}", o.error.unwrap_or_default())),
+        }
+    }
+
     fn complete(&self, l: &Local, bytes: u64) -> Result<()> {
         let body = serde_json::json!({ "bytes": bytes, "durationSecs": l.duration_secs.unwrap_or(0.0), "title": l.title });
         let mut res = self.agent.post(&self.url(l.id, "/complete")).header("Authorization", &self.auth()).send_json(&body)?;
         let status = res.status().as_u16();
-        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None });
+        let o: Offset = res.body_mut().read_json().unwrap_or(Offset { offset: None, error: None, done: false });
         if status != 200 {
             return Err(anyhow!("{status}: {}", o.error.unwrap_or_default()));
         }
@@ -187,6 +223,13 @@ impl Client<'_> {
 enum Sent {
     Taken,
     Skipped,
+    NotTaken,
+}
+
+enum VideoSent {
+    At(u64),
+    /// Debrief has it (or refused it, so it isn't sent again).
+    Done,
     NotTaken,
 }
 
@@ -208,48 +251,85 @@ fn push_screens(c: &Client, root: &Path, l: &mut Local) -> Result<()> {
     Ok(())
 }
 
-/// Moves one recording as far along as it can go. Returns whether it's finished.
-fn push_one(c: &Client, root: &Path, l: &mut Local, device: &str, live: bool) -> Result<bool> {
-    let file = l.audio(root);
-    let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-    if live && size < l.uploaded + LIVE_MIN {
-        return Ok(false);
+/// Sends the window videos, in order, each picking up where Debrief's copy ends.
+fn push_videos(c: &Client, root: &Path, l: &mut Local) -> Result<()> {
+    if l.videos_off {
+        return Ok(());
     }
-    if !l.server_started {
-        l.uploaded = c.start(l, device)?;
-        l.server_started = true;
-        l.save(root)?;
-    }
-    while l.uploaded < size {
-        let before = l.uploaded;
-        l.uploaded = match c.append(l, &file, l.uploaded, size) {
-            Ok(n) => n,
-            // Nothing more will be taken, so stop trying: it's in Debrief as far as it got.
-            Err(e) if e.is::<Finished>() => {
-                l.done_at = Some(chrono::Utc::now());
-                l.last_error = Some("Debrief stopped waiting for the rest and transcribed what it had.".into());
-                l.save(root)?;
-                log::warn!("Recording {} was finished by Debrief at {before} of {size} bytes", l.id);
-                return Ok(true);
+    for (ms, path) in crate::screens::videos(&l.dir(root)).into_iter().skip(l.videos_sent) {
+        let size = std::fs::metadata(&path)?.len();
+        loop {
+            match c.video(l, ms, &path, l.video_uploaded, size)? {
+                VideoSent::At(n) if n == l.video_uploaded || n > size => return Err(anyhow!("the server didn't take any of the video chunk")),
+                VideoSent::At(n) => {
+                    l.video_uploaded = n;
+                    l.save(root)?;
+                }
+                VideoSent::Done => {
+                    l.videos_sent += 1;
+                    l.video_uploaded = 0;
+                    l.save(root)?;
+                    break;
+                }
+                VideoSent::NotTaken => {
+                    l.videos_off = true;
+                    l.save(root)?;
+                    return Ok(());
+                }
             }
-            Err(e) => return Err(e),
-        };
-        l.save(root)?;
-        if l.uploaded == before {
-            return Err(anyhow!("the server didn't take any of the chunk"));
         }
     }
-    // Before completing, so they're there when the transcriber reads the recording.
-    push_screens(c, root, l)?;
-    if l.ended_at.is_some() && !live {
+    Ok(())
+}
+
+/// Moves one recording as far along as it can go. Returns whether it's finished.
+fn push_one(c: &Client, root: &Path, l: &mut Local, device: &str, live: bool) -> Result<bool> {
+    if !l.audio_sent {
+        let file = l.audio(root);
+        let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+        if live && size < l.uploaded + LIVE_MIN {
+            return Ok(false);
+        }
+        if !l.server_started {
+            l.uploaded = c.start(l, device)?;
+            l.server_started = true;
+            l.save(root)?;
+        }
+        while l.uploaded < size {
+            let before = l.uploaded;
+            l.uploaded = match c.append(l, &file, l.uploaded, size) {
+                Ok(n) => n,
+                // Nothing more will be taken, so stop trying: it's in Debrief as far as it got.
+                Err(e) if e.is::<Finished>() => {
+                    l.done_at = Some(chrono::Utc::now());
+                    l.last_error = Some("Debrief stopped waiting for the rest and transcribed what it had.".into());
+                    l.save(root)?;
+                    log::warn!("Recording {} was finished by Debrief at {before} of {size} bytes", l.id);
+                    return Ok(true);
+                }
+                Err(e) => return Err(e),
+            };
+            l.save(root)?;
+            if l.uploaded == before {
+                return Err(anyhow!("the server didn't take any of the chunk"));
+            }
+        }
+        // Before completing, so they're there when the transcriber reads the recording.
+        push_screens(c, root, l)?;
+        if l.ended_at.is_none() || live {
+            return Ok(false);
+        }
         c.complete(l, size)?;
-        l.done_at = Some(chrono::Utc::now());
-        l.last_error = None;
+        l.audio_sent = true;
         l.save(root)?;
         log::info!("Uploaded recording {} ({size} bytes)", l.id);
-        return Ok(true);
     }
-    Ok(false)
+    // After the audio is in, so the transcript isn't kept waiting for them.
+    push_videos(c, root, l)?;
+    l.done_at = Some(chrono::Utc::now());
+    l.last_error = None;
+    l.save(root)?;
+    Ok(true)
 }
 
 impl Uploader {
