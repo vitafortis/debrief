@@ -1,10 +1,10 @@
 name: Recorder
 
 # Builds Debrief Recorder for macOS (universal: Apple silicon and Intel) and
-# Windows. With the Apple secrets below set, the Mac build is signed with a
-# Developer ID and notarized, so it opens without a Gatekeeper warning and
-# keeps its permissions from one version to the next; without them it's
-# signed ad hoc, as before. Windows is unsigned. Every build's installers are kept as workflow
+# Windows. With a certificate in the secrets below, the Mac build is signed
+# with it, so it keeps its permissions from one version to the next; with a
+# Developer ID and the notarizing secrets too, it's notarized and opens without
+# a Gatekeeper warning. Without a certificate it's signed ad hoc, as before. Windows is unsigned. Every build's installers are kept as workflow
 # artifacts, and every push to main publishes them as the latest GitHub
 # release. The version is major.minor from tauri.conf.json, with this
 # workflow's run number as the patch: bump the minor there for a new series.
@@ -32,16 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
-      # Whether the Mac build is signed and notarized, for the release notes.
-      mac_signed: ${{ steps.v.outputs.mac_signed }}
+      # Whether the Mac build is notarized, for the release notes.
+      mac_notarized: ${{ steps.v.outputs.mac_notarized }}
     steps:
       - uses: actions/checkout@v4
       - id: v
         env:
-          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+          NOTARIZED: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' }}
         run: |
           echo "version=$(jq -r .version recorder/src-tauri/tauri.conf.json | cut -d. -f1,2).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          echo "mac_signed=$HAS_CERT" >> "$GITHUB_OUTPUT"
+          echo "mac_notarized=$NOTARIZED" >> "$GITHUB_OUTPUT"
 
   build:
     needs: version
@@ -82,11 +82,13 @@ jobs:
       - name: Unit tests
         working-directory: recorder/src-tauri
         run: cargo test
-      # Repository secrets, from Apple Developer (see README → Signing the Mac recorder):
-      #   APPLE_CERTIFICATE           the Developer ID Application certificate and key, a .p12 as base64
+      # Repository secrets (see README → Signing the Mac recorder):
+      #   APPLE_CERTIFICATE           the signing certificate and key, a .p12 as base64:
+      #                               self-signed, or a Developer ID Application one
       #   APPLE_CERTIFICATE_PASSWORD  the .p12's password
-      #   APPLE_SIGNING_IDENTITY      "Developer ID Application: Your Name (TEAMID)"
-      #   APPLE_ID, APPLE_PASSWORD    the Apple Account and an app-specific password for it, to notarize
+      #   APPLE_SIGNING_IDENTITY      the certificate's name, e.g. "Developer ID Application: Your Name (TEAMID)"
+      # and, to notarize, which needs a Developer ID:
+      #   APPLE_ID, APPLE_PASSWORD    the Apple Account and an app-specific password for it
       #   APPLE_TEAM_ID               the 10-character team ID
       # Tauri signs, notarizes and staples when they're in its environment; they're
       # only put there when set, since an empty one would make it try and fail.
@@ -101,26 +103,36 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           echo '{"version":"${{ needs.version.outputs.version }}"}' > version.json
-          signed=false
+          signed=false notarized=false
           if [ "$RUNNER_OS" = macOS ] && [ -n "$CERT" ]; then
             export APPLE_CERTIFICATE="$CERT" APPLE_CERTIFICATE_PASSWORD="$CERT_PASSWORD" APPLE_SIGNING_IDENTITY="$IDENTITY"
-            export APPLE_ID="$NOTARY_ID" APPLE_PASSWORD="$NOTARY_PASSWORD" APPLE_TEAM_ID="$TEAM_ID"
             signed=true
+            if [ -n "$NOTARY_ID" ]; then
+              export APPLE_ID="$NOTARY_ID" APPLE_PASSWORD="$NOTARY_PASSWORD" APPLE_TEAM_ID="$TEAM_ID"
+              notarized=true
+            fi
           fi
           echo "signed=$signed" >> "$GITHUB_OUTPUT"
+          echo "notarized=$notarized" >> "$GITHUB_OUTPUT"
           pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config version.json
       # Without this entitlement the hardened runtime gives the app silence instead of the microphone, and never asks.
       - name: Check the microphone entitlement
         if: runner.os == 'macOS'
         run: codesign -d --entitlements - --xml "src-tauri/target/universal-apple-darwin/release/bundle/macos/Debrief Recorder.app" | grep -q com.apple.security.device.audio-input
-      # Gatekeeper's own check: a Developer ID signature with the notarization ticket stapled.
-      - name: Check the signature and notarization
+      # Signed with the certificate, not ad hoc; and if notarized, Gatekeeper's own check of the stapled ticket.
+      - name: Check the signature
         if: runner.os == 'macOS' && steps.build.outputs.signed == 'true'
+        env:
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          NOTARIZED: ${{ steps.build.outputs.notarized }}
         run: |
           app="src-tauri/target/universal-apple-darwin/release/bundle/macos/Debrief Recorder.app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          spctl --assess --type execute --verbose=2 "$app"
-          xcrun stapler validate "$app"
+          codesign -dvv "$app" 2>&1 | grep -qxF "Authority=$IDENTITY"
+          if [ "$NOTARIZED" = true ]; then
+            spctl --assess --type execute --verbose=2 "$app"
+            xcrun stapler validate "$app"
+          fi
       # The same file names every release, so releases/latest/download/<name> always works (Settings → Devices & keys links there).
       - name: Name the installer
         working-directory: .
@@ -160,5 +172,5 @@ jobs:
           make_latest: ${{ steps.latest.outputs.make_latest }}
           files: dist/*
           body: |
-            macOS — open the .dmg and drag Debrief Recorder to Applications. ${{ needs.version.outputs.mac_signed == 'true' && 'It is signed and notarized, so it opens like any other app.' || 'It is not notarized: the first time, macOS blocks it; open System Settings → Privacy & Security and click Open Anyway.' }}
+            macOS — open the .dmg and drag Debrief Recorder to Applications. ${{ needs.version.outputs.mac_notarized == 'true' && 'It is signed and notarized, so it opens like any other app.' || 'It is not notarized: the first time, macOS blocks it; open System Settings → Privacy & Security and click Open Anyway.' }}
             Windows — run the installer. It is unsigned, so SmartScreen may warn: More info → Run anyway.
