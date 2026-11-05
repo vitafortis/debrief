@@ -239,7 +239,7 @@ Each calendar has a default destination (Settings → Calendars → *Tasks go to
 
 1. In Debrief, open **Settings → Recorder & devices** and create a key for this computer (e.g. *Work MacBook*). Copy it; it's shown once.
 2. Download the recorder from the same page (**Mac** or **Windows**), or from the [latest release](https://github.com/vitafortis/debrief/releases/latest).
-   - **Mac:** open the `.dmg` and drag **Debrief Recorder** to Applications. It isn't signed yet, so the first time, right-click it → **Open** → **Open**. (If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/Debrief Recorder.app"`.)
+   - **Mac:** open the `.dmg` and drag **Debrief Recorder** to Applications. Unless it was built with a Developer ID (see [Signing the Mac recorder](#signing-the-mac-recorder)), macOS blocks it the first time: open System Settings → Privacy & Security and click **Open Anyway**. (If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/Debrief Recorder.app"`.)
    - **Windows:** run the installer. SmartScreen warns about an unsigned app: **More info → Run anyway**.
 3. It opens its Settings window the first time (later: the waveform icon in the menu bar or tray → **Settings…**):
    - **Server:** `https://debrief.example.com`, or `http://<server>:3000` on your LAN. Optionally a **fallback server** for when the first can't be reached, such as the LAN address at home.
@@ -639,6 +639,27 @@ cargo run --example smoke -- 10 http://localhost:3150 <API key>   # record 10 s 
 | `services/mcp` | The MCP server (streamable HTTP, stateless) |
 | `transcriber` | Python: folder scanner, faster-whisper, pyannote |
 | `recorder` | The Debrief Recorder: Tauri 2 tray app in Rust. Meeting detection, capture (cpal, a Core Audio process tap on macOS, WASAPI loopback on Windows), Ogg Opus, resumable upload |
+
+### Signing the Mac recorder
+
+Without these, the Mac recorder is signed ad hoc: macOS blocks it the first time and treats every new version as a different app, so Microphone and Screen Recording have to be allowed again after each update. With a Developer ID (the Apple Developer Program, $99 a year), the build workflow signs and notarizes it: it opens like any other app, and permissions carry over from one version to the next.
+
+1. Join the [Apple Developer Program](https://developer.apple.com/programs/enroll/) as an individual (or an organization, if its name should be the one macOS shows).
+2. On a Mac, in [Certificates](https://developer.apple.com/account/resources/certificates/list), create a **Developer ID Application** certificate (Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority, saved to disk, makes the request it asks for). Download it and double-click it to add it to the login keychain.
+3. In Keychain Access → login → My Certificates, right-click **Developer ID Application: *your name* (*team ID*)** → **Export**, as a `.p12` with a password. Then `base64 -i Certificates.p12 | pbcopy`.
+4. At [account.apple.com](https://account.apple.com) → Sign-In and Security → App-Specific Passwords, make one for notarizing.
+5. In the GitHub repository → Settings → Secrets and variables → Actions, add:
+
+| Secret | Value |
+|---|---|
+| `APPLE_CERTIFICATE` | the base64 from step 3 |
+| `APPLE_CERTIFICATE_PASSWORD` | the `.p12`'s password |
+| `APPLE_SIGNING_IDENTITY` | the certificate's name exactly, `Developer ID Application: Your Name (ABCDE12345)` |
+| `APPLE_ID` | your Apple Account's email |
+| `APPLE_PASSWORD` | the app-specific password from step 4 |
+| `APPLE_TEAM_ID` | the 10 characters in brackets (also under Membership details) |
+
+The next build of the recorder is signed, notarized and checked with Gatekeeper's own `spctl`, and its release notes say so. Install that version once and allow Microphone and Screen Recording one last time; later versions keep them. Delete the `.p12` once the secret is saved.
 
 ## License
 
