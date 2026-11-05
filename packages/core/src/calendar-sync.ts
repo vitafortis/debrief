@@ -1,11 +1,11 @@
 import fs from "node:fs/promises";
-import { and, eq, gte, lte, notInArray } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, notInArray } from "drizzle-orm";
 import { GoogleAuth, OAuth2Client, type AuthClient } from "google-auth-library";
 import ical, { type VEvent } from "node-ical";
 import type { Db } from "./db";
 import { calendarEvents, calendars, eventAttendees } from "./schema";
 import { correlateUnmatched } from "./correlate";
-import { saveSettings, setting, settingNumber } from "./settings";
+import { saveSettings, setting, settingNumber, settingSource } from "./settings";
 
 /** A calendar event in the shape Debrief stores, whatever it came from. */
 export type NormalizedEvent = {
@@ -56,7 +56,7 @@ type GoogleEvent = {
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };
 
-let googleClient: { raw: string; client: Promise<AuthClient | null> } | null = null;
+const googleClients = new Map<string, Promise<AuthClient | null>>();
 
 /** The Google credentials JSON: pasted in Settings, or a file named by GOOGLE_CREDENTIALS_FILE. */
 async function googleCredentials() {
@@ -66,15 +66,38 @@ async function googleCredentials() {
   return raw.trim() || setting("GOOGLE_CREDENTIALS").trim();
 }
 
+type GoogleAccount = { type: "authorized_user"; client_id: string; client_secret: string; refresh_token: string; account: string };
+
+/** The Google accounts connected with "Connect Google", each kept by its email. */
+export function googleAccounts(): GoogleAccount[] {
+  try {
+    const list = JSON.parse(setting("GOOGLE_ACCOUNTS") || "[]");
+    return Array.isArray(list) ? list.filter((a) => a?.account && a?.refresh_token) : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
- * A Google client from a service account key (share each calendar with its
+ * A Google client for a connected account, or (account null) from
+ * GOOGLE_CREDENTIALS: a service account key (share each calendar with its
  * address) or an OAuth "authorized_user" file with a refresh token (sees
  * everything the account can). Made again when the credentials change.
  */
-export async function googleAuth(): Promise<AuthClient | null> {
-  const raw = await googleCredentials();
-  if (googleClient?.raw !== raw) googleClient = { raw, client: makeGoogleClient(raw) };
-  return googleClient.client;
+export async function googleAuth(account: string | null = null): Promise<AuthClient | null> {
+  let raw: string;
+  if (account === null) raw = await googleCredentials();
+  else {
+    const a = googleAccounts().find((a) => a.account === account);
+    if (!a) throw new Error(`${account} isn't connected any more. Connect it again in Settings → Calendars.`);
+    raw = JSON.stringify(a);
+  }
+  if (!googleClients.has(raw)) {
+    // Old credentials go: a reconnect or disconnect changes them.
+    if (googleClients.size > 20) googleClients.clear();
+    googleClients.set(raw, makeGoogleClient(raw));
+  }
+  return googleClients.get(raw)!;
 }
 
 async function makeGoogleClient(raw: string): Promise<AuthClient | null> {
@@ -115,8 +138,8 @@ export function normalizeGoogleEvent(e: GoogleEvent): NormalizedEvent | null {
   };
 }
 
-export async function fetchGoogleEvents(calendarId: string, from: Date, to: Date): Promise<NormalizedEvent[]> {
-  const client = await googleAuth();
+export async function fetchGoogleEvents(calendarId: string, from: Date, to: Date, account: string | null = null): Promise<NormalizedEvent[]> {
+  const client = await googleAuth(account);
   if (!client) throw new Error("Google isn't connected. Connect it in Settings → Calendars.");
   const out: NormalizedEvent[] = [];
   let pageToken: string | undefined;
@@ -142,9 +165,9 @@ export async function fetchGoogleEvents(calendarId: string, from: Date, to: Date
   return out;
 }
 
-/** Calendars the Google account has in its list (empty for a service account until calendars are shared and added). */
-export async function listGoogleCalendars() {
-  const client = await googleAuth();
+/** Calendars a Google account has in its list (empty for a service account until calendars are shared and added). */
+export async function listGoogleCalendars(account: string | null = null) {
+  const client = await googleAuth(account);
   if (!client) return [];
   const data = await googleGet<{ items?: { id: string; summary?: string; summaryOverride?: string; primary?: boolean; accessRole?: string }[] }>(
     client,
@@ -162,14 +185,18 @@ function oauthClient(redirectUri: string) {
   return new OAuth2Client(setting("GOOGLE_OAUTH_CLIENT_ID"), setting("GOOGLE_OAUTH_CLIENT_SECRET"), redirectUri);
 }
 
-/** Where "Connect Google" sends you. offline + consent, so Google hands back a refresh token every time. */
+/**
+ * Where "Connect Google" sends you. offline + consent, so Google hands back a
+ * refresh token every time; select_account, so you can pick another account
+ * than the one you're signed in to.
+ */
 export function googleConnectUrl(redirectUri: string, state: string) {
-  return oauthClient(redirectUri).generateAuthUrl({ access_type: "offline", prompt: "consent", scope: [GOOGLE_SCOPE, "openid", "email"], state, include_granted_scopes: true });
+  return oauthClient(redirectUri).generateAuthUrl({ access_type: "offline", prompt: "select_account consent", scope: [GOOGLE_SCOPE, "openid", "email"], state, include_granted_scopes: true });
 }
 
 /**
- * Trades Google's code for a refresh token and keeps it as the Google
- * credentials, in the same "authorized_user" shape gcloud writes.
+ * Trades Google's code for a refresh token and adds the account to the
+ * connected ones, in the same "authorized_user" shape gcloud writes.
  */
 export async function googleConnect(db: Db, code: string, redirectUri: string) {
   const { tokens } = await oauthClient(redirectUri).getToken(code);
@@ -183,9 +210,36 @@ export async function googleConnect(db: Db, code: string, redirectUri: string) {
       // The email only labels the connection.
     }
   }
-  const creds = { type: "authorized_user", client_id: setting("GOOGLE_OAUTH_CLIENT_ID"), client_secret: setting("GOOGLE_OAUTH_CLIENT_SECRET"), refresh_token: tokens.refresh_token, account };
-  await saveSettings(db, { GOOGLE_CREDENTIALS: JSON.stringify(creds) });
+  if (!account) throw new Error("Google didn't say which account that was. Try Connect Google again.");
+  await saveGoogleAccount(db, account, tokens.refresh_token);
   return account;
+}
+
+/**
+ * Keeps a connected account (replacing it if it was connected before). An
+ * account connected before there could be several, kept as GOOGLE_CREDENTIALS,
+ * moves here when it's connected again, taking its calendars with it.
+ */
+export async function saveGoogleAccount(db: Db, account: string, refreshToken: string) {
+  const creds: GoogleAccount = { type: "authorized_user", client_id: setting("GOOGLE_OAUTH_CLIENT_ID"), client_secret: setting("GOOGLE_OAUTH_CLIENT_SECRET"), refresh_token: refreshToken, account };
+  const values: Record<string, string | null> = { GOOGLE_ACCOUNTS: JSON.stringify([...googleAccounts().filter((a) => a.account !== account), creds]) };
+  if (settingSource("GOOGLE_CREDENTIALS") === "saved") {
+    try {
+      const old = JSON.parse(setting("GOOGLE_CREDENTIALS"));
+      if (old.type === "authorized_user" && old.account === account) {
+        await db.update(calendars).set({ googleAccount: account }).where(and(eq(calendars.source, "google"), isNull(calendars.googleAccount)));
+        values.GOOGLE_CREDENTIALS = null;
+      }
+    } catch {
+      // Not JSON: not a connected account.
+    }
+  }
+  await saveSettings(db, values);
+}
+
+/** Forgets a connected account. Its calendars stay, and stop syncing until it's connected again. */
+export async function removeGoogleAccount(db: Db, account: string) {
+  await saveSettings(db, { GOOGLE_ACCOUNTS: JSON.stringify(googleAccounts().filter((a) => a.account !== account)) });
 }
 
 /** What the Google credentials are, without the secrets: for Settings. */
@@ -367,7 +421,7 @@ export async function syncAllCalendars(db: Db) {
   for (const cal of list) {
     try {
       const events =
-        cal.source === "google" ? await fetchGoogleEvents(cal.externalId, from, to) : await fetchIcsEvents(cal.externalId, from, to);
+        cal.source === "google" ? await fetchGoogleEvents(cal.externalId, from, to, cal.googleAccount) : await fetchIcsEvents(cal.externalId, from, to);
       await storeEvents(db, cal, events, from, to);
       await db.update(calendars).set({ lastSyncedAt: new Date(), lastError: null }).where(eq(calendars.id, cal.id));
       results.push({ calendar: cal.name, events: events.length });

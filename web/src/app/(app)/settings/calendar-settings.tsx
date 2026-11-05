@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronRight, Copy, ExternalLink, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { addCalendars, checkCalendarAction, disconnectGoogle, removeCalendar, saveGoogleClient, saveGoogleKey, updateCalendar } from "@/actions/settings";
+import { addCalendars, checkCalendarAction, disconnectGoogle, disconnectGoogleAccount, removeCalendar, saveGoogleClient, saveGoogleKey, updateCalendar } from "@/actions/settings";
 import { syncCalendarsNow } from "@/actions/meetings";
 import { useAction } from "@/components/task-item";
 import { contextColor } from "@/lib/colors";
@@ -14,6 +14,7 @@ export type Cal = {
   id: string;
   source: string;
   externalId: string;
+  googleAccount: string | null;
   name: string;
   context: string;
   enabled: boolean;
@@ -30,9 +31,14 @@ export type GoogleState = {
   email: string | null;
   locked: boolean;
   redirectUri: string;
-  found: { id: string; name: string; primary: boolean; added: "google" | "ics" | null }[] | null;
-  listError: string | null;
+  /** Accounts connected with Connect Google; account null is one connected before there could be several. */
+  accounts: { account: string | null; email: string | null; found: GoogleFound[]; listError: string | null }[];
 };
+
+type GoogleFound = { id: string; name: string; primary: boolean; added: "google" | "ics" | null };
+
+/** A calendar ticked in the Google step: which account it's read through, and its ID. */
+const pickKey = (account: string | null, id: string) => `${account ?? ""}\n${id}`;
 
 type Source = "gme" | "gsa" | "ics";
 
@@ -83,7 +89,7 @@ function CalendarRow({ c, contexts }: { c: Cal; contexts: string[] }) {
   const [ctx, setCtx] = useState(c.context);
   // Shown at once; the server catches up (and a failure puts it back).
   const [enabled, setEnabled] = useState(c.enabled);
-  const where = c.source === "google" ? `Google · ${c.externalId}` : `ICS link · ${c.externalId.replace(/^https?:\/\/([^/]+).*/, "$1")}`;
+  const where = c.source === "google" ? `Google · ${c.googleAccount && c.googleAccount !== c.externalId ? `${c.externalId} via ${c.googleAccount}` : c.externalId}` : `ICS link · ${c.externalId.replace(/^https?:\/\/([^/]+).*/, "$1")}`;
   return (
     <div>
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
@@ -166,40 +172,60 @@ function GoogleAccountStep({ g, picked, setPicked }: { g: GoogleState; picked: S
   const [client, setClient] = useState({ id: g.clientId, secret: "" });
   const insecure = g.redirectUri.startsWith("http:") && !/\/\/(localhost|127\.)/.test(g.redirectUri);
 
-  if (g.kind === "account")
+  if (g.accounts.length && !setup)
     return (
-      <div className="space-y-3">
-        <p className="text-[0.8125rem] text-success">
-          ✓ Connected{g.email ? ` as ${g.email}` : ""}.{" "}
-          {g.found?.length ? "Pick the calendars to sync." : ""}
-        </p>
-        {g.listError && <p className="text-xs text-danger">{g.listError}</p>}
-        {g.found && g.found.length === 0 && <p className="text-xs text-muted-foreground">This account has no calendars Debrief can read.</p>}
-        <div className="grid gap-1.5">
-          {g.found?.map((c) => (
-            <label key={c.id} className={`flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-[0.8125rem] ${c.added ? "opacity-60" : "cursor-pointer hover:bg-accent/50"}`}>
-              <input
-                type="checkbox"
-                className="checkbox"
-                disabled={!!c.added}
-                checked={!!c.added || picked.has(c.id)}
-                onChange={(e) => {
-                  const s = new Set(picked);
-                  if (e.target.checked) s.add(c.id);
-                  else s.delete(c.id);
-                  setPicked(s);
-                }}
-              />
-              <span className="min-w-0 flex-1 truncate">{c.name}</span>
-              <span className="text-[0.6875rem] text-muted-foreground">{c.added === "ics" ? "already syncing by its ICS link" : c.added ? "already syncing" : c.primary ? "your main calendar" : ""}</span>
-            </label>
-          ))}
+      <div className="space-y-4">
+        {g.accounts.map((a) => (
+          <div key={a.account ?? ""} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="mr-auto text-[0.8125rem] text-success">✓ Connected{a.email ? ` as ${a.email}` : ""}.</p>
+              {!(a.account === null && g.locked) && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={pending}
+                  onClick={() =>
+                    confirm(`Disconnect ${a.email ?? "Google"}? Its calendars stop syncing until you connect it again.`) &&
+                    go(() => (a.account === null ? disconnectGoogle() : disconnectGoogleAccount(a.account)))
+                  }
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
+            {a.listError && <p className="text-xs text-danger">{a.listError}</p>}
+            {!a.listError && a.found.length === 0 && <p className="text-xs text-muted-foreground">This account has no calendars Debrief can read.</p>}
+            <div className="grid gap-1.5">
+              {a.found.map((c) => {
+                const key = pickKey(a.account, c.id);
+                return (
+                  <label key={key} className={`flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-[0.8125rem] ${c.added ? "opacity-60" : "cursor-pointer hover:bg-accent/50"}`}>
+                    <input
+                      type="checkbox"
+                      className="checkbox"
+                      disabled={!!c.added}
+                      checked={!!c.added || picked.has(key)}
+                      onChange={(e) => {
+                        const s = new Set(picked);
+                        if (e.target.checked) s.add(key);
+                        else s.delete(key);
+                        setPicked(s);
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                    <span className="text-[0.6875rem] text-muted-foreground">{c.added === "ics" ? "already syncing by its ICS link" : c.added ? "already syncing" : c.primary ? "its main calendar" : ""}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        <div className="grid justify-items-start gap-1.5 border-t border-border pt-3">
+          <a href="/api/google/connect" className="btn btn-secondary btn-sm">
+            <Plus /> Connect another Google account
+          </a>
+          <p className="text-xs text-muted-foreground">Google asks which account; pick the one whose calendars you want.</p>
         </div>
-        {!g.locked && (
-          <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => confirm("Disconnect Google? Its calendars stop syncing until you connect again.") && go(() => disconnectGoogle())}>
-            Disconnect Google
-          </button>
-        )}
       </div>
     );
 
@@ -444,7 +470,9 @@ function AddCalendar({
   const [step, setStep] = useState<1 | 2 | 3>(initial.step);
   const [source, setSource] = useState<Source>(initial.source);
   // Tick your main calendar only for a first calendar: after that, you pick what to add.
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(first ? (g.found?.filter((c) => c.primary && !c.added).map((c) => c.id) ?? []) : []));
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(first ? g.accounts.flatMap((a) => a.found.filter((c) => c.primary && !c.added).map((c) => pickKey(a.account, c.id))) : [])
+  );
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [ctx, setCtx] = useState(contexts[0] ?? "work");
@@ -452,9 +480,11 @@ function AddCalendar({
 
   const list =
     source === "gme"
-      ? (g.found ?? []).filter((c) => picked.has(c.id) && !c.added).map((c) => ({ source: "google" as const, externalId: c.id, name: c.name }))
+      ? g.accounts.flatMap((a) =>
+          a.found.filter((c) => picked.has(pickKey(a.account, c.id)) && !c.added).map((c) => ({ source: "google" as const, externalId: c.id, name: c.name, googleAccount: a.account }))
+        )
       : [{ source: source === "ics" ? ("ics" as const) : ("google" as const), externalId: id.trim(), name: name.trim() }];
-  const ready = source === "gme" ? g.kind === "account" && list.length > 0 : !!id.trim() && (source === "ics" || g.kind === "service");
+  const ready = source === "gme" ? list.length > 0 : !!id.trim() && (source === "ics" || g.kind === "service");
   const labels = ["Where it lives", "Connect", "Name it"];
 
   return (

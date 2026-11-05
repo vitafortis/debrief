@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { DEVICE_COLORS, TASK_DESTINATIONS, calendars, createApiKey, deleteApiKey, setDeviceRule, testAi, testArchive } from "@debrief/core";
 import { saveSettings, setOwnerPassword, settingDef, settingNumber, settingSource } from "@debrief/core/settings";
-import { checkCalendar, googleIdFromIcs } from "@debrief/core/calendar-sync";
+import { checkCalendar, googleIdFromIcs, removeGoogleAccount } from "@debrief/core/calendar-sync";
 import { db } from "@/lib/db";
 import { requireViewer } from "@/lib/auth";
 
@@ -45,7 +45,13 @@ export async function updateCalendar(id: string, input: z.infer<typeof patch>): 
   }
 }
 
-const newCalendar = z.object({ source: z.enum(["google", "ics"]), externalId: z.string().trim().min(3).max(1000), name: z.string().trim().max(120) });
+const newCalendar = z.object({
+  source: z.enum(["google", "ics"]),
+  externalId: z.string().trim().min(3).max(1000),
+  name: z.string().trim().max(120),
+  // The connected Google account it's read through; none for a service account, gcloud's file or an ICS link.
+  googleAccount: z.string().trim().max(320).nullish(),
+});
 
 /** Adds calendars (or turns on ones found in a Google account) under one context, and syncs them straight away. */
 export async function addCalendars(list: z.input<typeof newCalendar>[], ctx: string, defaultDestination: string): Promise<Result> {
@@ -63,10 +69,11 @@ export async function addCalendars(list: z.input<typeof newCalendar>[], ctx: str
       if (twin) return { ok: false, error: `${twin.name} is already syncing that calendar${twin.source === "ics" ? " by its ICS link" : " through Google"}. Remove it first to switch.` };
       const externalId = v.source === "ics" ? v.externalId.replace(/^webcal:/i, "https:") : v.externalId;
       const name = v.name || (v.source === "ics" ? `${c} feed` : externalId);
+      const googleAccount = v.source === "google" ? (v.googleAccount ?? null) : null;
       await db()
         .insert(calendars)
-        .values({ source: v.source, externalId, name, context: c, defaultDestination: dest })
-        .onConflictDoUpdate({ target: [calendars.source, calendars.externalId], set: { enabled: true, name, context: c, defaultDestination: dest } });
+        .values({ source: v.source, externalId, googleAccount, name, context: c, defaultDestination: dest })
+        .onConflictDoUpdate({ target: [calendars.source, calendars.externalId], set: { enabled: true, googleAccount, name, context: c, defaultDestination: dest } });
     }
     await db().execute(sql`select pg_notify('debrief_sync_now', '')`);
     refresh();
@@ -110,6 +117,18 @@ export async function saveGoogleClient(clientId: string, clientSecret: string): 
 /** A service account key or gcloud's file, uploaded in the calendar steps. */
 export async function saveGoogleKey(json: string): Promise<Result> {
   return saveSettingsAction({ GOOGLE_CREDENTIALS: json });
+}
+
+/** Forgets a connected Google account. Its calendars stay, and stop syncing until it's connected again. */
+export async function disconnectGoogleAccount(account: string): Promise<Result> {
+  try {
+    await requireViewer();
+    await removeGoogleAccount(db(), z.string().min(1).parse(account));
+    refresh();
+    return { ok: true, message: `${account} disconnected.` };
+  } catch (err) {
+    return fail(err);
+  }
 }
 
 /** Forgets the Google credentials. Calendars stay, and stop syncing until Google is connected again. */

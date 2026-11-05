@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { calendarEvents, calendars, listContexts, setting } from "@debrief/core";
-import { googleCredentialInfo, googleIdFromIcs, googleOAuthReady, listGoogleCalendars, syncWindow } from "@debrief/core/calendar-sync";
+import { googleAccounts, googleCredentialInfo, googleIdFromIcs, googleOAuthReady, listGoogleCalendars, syncWindow } from "@debrief/core/calendar-sync";
 import { settingSource } from "@debrief/core/settings";
 import { db } from "@/lib/db";
 import { fmtAgo } from "@/lib/format";
@@ -31,22 +31,24 @@ export default async function CalendarsSettings({ searchParams }: { searchParams
     googleCredentialInfo(),
   ]);
 
-  // With an account connected, list what it can see, so you tick calendars instead of typing IDs.
-  let found: GoogleState["found"] = null;
-  let listError: string | null = null;
-  if (cred.kind === "account") {
-    try {
-      // Already here: added through Google, or as its ICS link (which would otherwise be added a second time).
-      const added = new Map<string, "google" | "ics">();
-      for (const c of cals.filter((c) => c.enabled)) {
-        const id = c.source === "google" ? c.externalId : googleIdFromIcs(c.externalId);
-        if (id && !added.has(id)) added.set(id, c.source === "google" ? "google" : "ics");
-      }
-      found = (await listGoogleCalendars()).map((c) => ({ ...c, added: added.get(c.id) ?? null }));
-    } catch (err) {
-      listError = `Couldn't list your calendars: ${(err as Error).message}`;
-    }
+  // With accounts connected, list what each can see, so you tick calendars instead of typing IDs.
+  // Already here: added through Google, or as its ICS link (which would otherwise be added a second time).
+  const added = new Map<string, "google" | "ics">();
+  for (const c of cals.filter((c) => c.enabled)) {
+    const id = c.source === "google" ? c.externalId : googleIdFromIcs(c.externalId);
+    if (id && !added.has(id)) added.set(id, c.source === "google" ? "google" : "ics");
   }
+  // One connected before there could be several is still GOOGLE_CREDENTIALS (account null) until it's connected again.
+  const connected = [...(cred.kind === "account" ? [{ account: null, email: cred.email }] : []), ...googleAccounts().map((a) => ({ account: a.account, email: a.account }))];
+  const accounts: GoogleState["accounts"] = await Promise.all(
+    connected.map(async (a) => {
+      try {
+        return { ...a, found: (await listGoogleCalendars(a.account)).map((c) => ({ ...c, added: added.get(c.id) ?? null })), listError: null };
+      } catch (err) {
+        return { ...a, found: [], listError: `Couldn't list its calendars: ${(err as Error).message}` };
+      }
+    })
+  );
   const n = Object.fromEntries(counts.map((c) => [c.id, c.n]));
 
   return (
@@ -60,6 +62,7 @@ export default async function CalendarsSettings({ searchParams }: { searchParams
             id: c.id,
             source: c.source,
             externalId: c.externalId,
+            googleAccount: c.googleAccount,
             name: c.name,
             context: c.context,
             enabled: c.enabled,
@@ -76,8 +79,7 @@ export default async function CalendarsSettings({ searchParams }: { searchParams
             email: cred.email,
             locked: cred.fromFile || settingSource("GOOGLE_CREDENTIALS") === "env",
             redirectUri: await googleRedirectUri(),
-            found,
-            listError,
+            accounts,
           }}
           flash={{ add: sp.add === "google", connected: sp.google ?? null, error: sp.google_error ?? null }}
         />
