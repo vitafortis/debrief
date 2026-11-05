@@ -642,13 +642,23 @@ cargo run --example smoke -- 10 http://localhost:3150 <API key>   # record 10 s 
 
 ### Signing the Mac recorder
 
-Without these, the Mac recorder is signed ad hoc: macOS blocks it the first time and treats every new version as a different app, so Microphone and Screen Recording have to be allowed again after each update. With a Developer ID (the Apple Developer Program, $99 a year), the build workflow signs and notarizes it: it opens like any other app, and permissions carry over from one version to the next.
+Without a certificate, the Mac recorder is signed ad hoc: macOS treats every new version as a different app, so Microphone and Screen Recording have to be allowed again after each update. Signing every build with the same certificate fixes that, and a self-signed one is enough. Notarizing as well, which needs a Developer ID (the Apple Developer Program, $99 a year), also stops Gatekeeper blocking the app the first time it's opened.
+
+**Self-signed**
+
+1. On a Mac, in Keychain Access → Certificate Assistant → Create a Certificate: name it (say `Debrief Recorder Signing`), Identity Type **Self Signed Root**, Certificate Type **Code Signing**, and tick **Let me override defaults** to set the validity to 3650 days, since a new certificate means allowing the permissions again.
+2. In Keychain Access → login → My Certificates, right-click it → **Export**, as a `.p12` with a password. Then `base64 -i Certificates.p12 | pbcopy`.
+3. In the GitHub repository → Settings → Secrets and variables → Actions, add `APPLE_CERTIFICATE` (the base64), `APPLE_CERTIFICATE_PASSWORD` (the `.p12`'s password) and `APPLE_SIGNING_IDENTITY` (the certificate's name exactly).
+
+macOS still blocks each newly downloaded version the first time: System Settings → Privacy & Security → Open Anyway.
+
+**Developer ID, notarized**
 
 1. Join the [Apple Developer Program](https://developer.apple.com/programs/enroll/) as an individual (or an organization, if its name should be the one macOS shows).
 2. On a Mac, in [Certificates](https://developer.apple.com/account/resources/certificates/list), create a **Developer ID Application** certificate (Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority, saved to disk, makes the request it asks for). Download it and double-click it to add it to the login keychain.
-3. In Keychain Access → login → My Certificates, right-click **Developer ID Application: *your name* (*team ID*)** → **Export**, as a `.p12` with a password. Then `base64 -i Certificates.p12 | pbcopy`.
+3. Export it as in step 2 above.
 4. At [account.apple.com](https://account.apple.com) → Sign-In and Security → App-Specific Passwords, make one for notarizing.
-5. In the GitHub repository → Settings → Secrets and variables → Actions, add:
+5. Add these secrets:
 
 | Secret | Value |
 |---|---|
@@ -659,7 +669,7 @@ Without these, the Mac recorder is signed ad hoc: macOS blocks it the first time
 | `APPLE_PASSWORD` | the app-specific password from step 4 |
 | `APPLE_TEAM_ID` | the 10 characters in brackets (also under Membership details) |
 
-The next build of the recorder is signed, notarized and checked with Gatekeeper's own `spctl`, and its release notes say so. Install that version once and allow Microphone and Screen Recording one last time; later versions keep them. Delete the `.p12` once the secret is saved.
+Either way, the next build of the recorder is signed with the certificate, and checked that it is; a notarized one is also checked with Gatekeeper's own `spctl`, and its release notes say so. Install that version once and allow Microphone and Screen Recording one last time; later versions keep them. Delete the `.p12` once the secret is saved.
 
 ## License
 
