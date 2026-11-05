@@ -344,7 +344,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id().as_ref() {
             "toggle" => {
                 if app.state::<State>().active.lock().unwrap().is_some() {
-                    stop_recording(app, "stopped from the menu");
+                    // Finishing the window video can take seconds: not on the main thread, which would freeze the menu bar.
+                    let app = app.clone();
+                    std::thread::spawn(move || stop_recording(&app, "stopped from the menu"));
                 } else if let Err(err) = start_recording(app, None, None) {
                     show_prompt(app, Prompt::error(format!("Couldn't start recording: {err}")));
                 }
@@ -582,8 +584,9 @@ fn status(st: S) -> StatusView {
     }
 }
 
+// Async, so it runs off the main thread: stopping can take seconds.
 #[tauri::command]
-fn toggle_recording(app: AppHandle) -> Result<(), String> {
+async fn toggle_recording(app: AppHandle) -> Result<(), String> {
     if app.state::<State>().active.lock().unwrap().is_some() {
         stop_recording(&app, "stopped from Settings");
         Ok(())
