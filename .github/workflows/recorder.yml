@@ -90,13 +90,43 @@ jobs:
       # and, to notarize, which needs a Developer ID:
       #   APPLE_ID, APPLE_PASSWORD    the Apple Account and an app-specific password for it
       #   APPLE_TEAM_ID               the 10-character team ID
-      # Tauri signs, notarizes and staples when they're in its environment; they're
-      # only put there when set, since an empty one would make it try and fail.
+      # The certificate goes into a keychain of its own here rather than through
+      # Tauri's APPLE_CERTIFICATE, which only finds Apple-issued certificates. A
+      # self-signed one is also trusted for code signing, or codesign won't use it.
+      - name: Import the signing certificate
+        if: runner.os == 'macOS'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          [ -n "$CERT" ] || exit 0
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kc_password=$(uuidgen)
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$kc_password" "$kc"
+          security set-keychain-settings -t 3600 -u "$kc"
+          security unlock-keychain -p "$kc_password" "$kc"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -T /usr/bin/codesign -k "$kc"
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kc_password" "$kc" > /dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          case "$IDENTITY" in
+            "Developer ID Application:"*) ;;
+            *)
+              security find-certificate -c "$IDENTITY" -p "$kc" > "$RUNNER_TEMP/cert.pem"
+              sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+              ;;
+          esac
+          security find-identity -v -p codesigning "$kc"
+          security find-identity -v -p codesigning "$kc" | grep -qF "\"$IDENTITY\""
+      # Tauri signs with the identity, and notarizes and staples when the notarizing
+      # secrets are in its environment; they're only put there when set, since an
+      # empty one would make it try and fail.
       - name: Build
         id: build
         env:
           CERT: ${{ secrets.APPLE_CERTIFICATE }}
-          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           NOTARY_ID: ${{ secrets.APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -105,7 +135,7 @@ jobs:
           echo '{"version":"${{ needs.version.outputs.version }}"}' > version.json
           signed=false notarized=false
           if [ "$RUNNER_OS" = macOS ] && [ -n "$CERT" ]; then
-            export APPLE_CERTIFICATE="$CERT" APPLE_CERTIFICATE_PASSWORD="$CERT_PASSWORD" APPLE_SIGNING_IDENTITY="$IDENTITY"
+            export APPLE_SIGNING_IDENTITY="$IDENTITY"
             signed=true
             if [ -n "$NOTARY_ID" ]; then
               export APPLE_ID="$NOTARY_ID" APPLE_PASSWORD="$NOTARY_PASSWORD" APPLE_TEAM_ID="$TEAM_ID"
