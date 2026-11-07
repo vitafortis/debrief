@@ -201,7 +201,7 @@ function action(r: CleanupRow, canSummarize: boolean): { label: string; href: st
   if (first === "no-event") return { label: "Link event", href: page };
   if (first === "speakers") return { label: "Name speakers", href: page };
   if (first === "no-summary" && canSummarize) return { label: "Summarize", href: page };
-  if (first === "tasks") return { label: "Review tasks", href: "/tasks" };
+  if (first === "tasks") return { label: "Review tasks", href: "/tasks?status=pending" };
   return { label: "Open", href: page };
 }
 

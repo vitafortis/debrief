@@ -6,10 +6,13 @@ import { db } from "@/lib/db";
 import { currentContext } from "@/lib/context";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { TaskBoard } from "@/components/task-board";
+import { TaskOverview } from "@/components/task-overview";
+import { fmtDateTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Tasks" };
 
 const TABS = [
+  { key: "all", label: "All" },
   { key: "pending", label: "To review" },
   { key: "approved", label: "Approved" },
   { key: "pushed", label: "Sent" },
@@ -18,30 +21,38 @@ const TABS = [
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const sp = await searchParams;
-  const status = TABS.find((t) => t.key === sp.status)?.key ?? "pending";
+  const status = TABS.find((t) => t.key === sp.status)?.key ?? "all";
   const context = await currentContext();
-  const [rows, counts] = await Promise.all([listTasks(db(), { status: [status], context }), taskCounts(db())]);
+  // All: everything but what was dismissed.
+  const statuses = status === "all" ? (["pending", "approved", "pushed"] as const) : ([status] as const);
+  const [rows, counts] = await Promise.all([listTasks(db(), { status: [...statuses], context, limit: status === "all" ? 500 : undefined }), taskCounts(db())]);
   const integrations = integrationStatus();
   const items = rows.map((r) => ({
     task: r.task,
     meetingTitle: meetingTitle({ title: r.transcriptTitle, eventTitle: r.eventTitle, titleHint: r.titleHint, recordedAt: r.recordedAt }),
+    when: fmtDateTime(r.recordedAt),
   }));
+  const count = (k: (typeof TABS)[number]["key"]) => (k === "all" ? (counts.pending ?? 0) + (counts.approved ?? 0) + (counts.pushed ?? 0) : counts[k]);
 
   return (
     <div>
       <PageHeader
         title="Tasks"
-        description="Action items from your recordings. Review them, then send them to Akiflow or Linear."
+        description={
+          status === "all"
+            ? "Every action item from your recordings. Click one for its details."
+            : "Action items from your recordings. Review them, then send them to Akiflow or Linear."
+        }
         actions={
           <div className="flex rounded-xl bg-muted p-0.5 text-xs font-medium">
             {TABS.map((t) => (
               <Link
                 key={t.key}
-                href={t.key === "pending" ? "/tasks" : `/tasks?status=${t.key}`}
+                href={t.key === "all" ? "/tasks" : `/tasks?status=${t.key}`}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 ${status === t.key ? "bg-card shadow-surface" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {t.label}
-                {counts[t.key] ? <span className="font-mono text-[0.6875rem] text-muted-foreground tabular-nums">{counts[t.key]}</span> : null}
+                {count(t.key) ? <span className="font-mono text-[0.6875rem] text-muted-foreground tabular-nums">{count(t.key)}</span> : null}
               </Link>
             ))}
           </div>
@@ -60,13 +71,15 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             </Link>
           </p>
         )}
-        {items.length ? (
+        {items.length && status === "all" ? (
+          <TaskOverview items={items} integrations={integrations} />
+        ) : items.length && status !== "all" ? (
           <TaskBoard items={items} status={status} integrations={integrations} />
         ) : (
           <EmptyState
             icon={ListChecks}
-            title={status === "pending" ? "Nothing to review" : `No ${TABS.find((t) => t.key === status)!.label.toLowerCase()} tasks`}
-            body={status === "pending" ? "New action items appear here after a recording is summarized." : undefined}
+            title={status === "all" ? "No action items yet" : status === "pending" ? "Nothing to review" : `No ${TABS.find((t) => t.key === status)!.label.toLowerCase()} tasks`}
+            body={status === "all" || status === "pending" ? "New action items appear here after a recording is summarized." : undefined}
           />
         )}
       </div>
