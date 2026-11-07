@@ -61,30 +61,8 @@ export function TaskItem({
   integrations: { akiflow: boolean; linear: boolean };
 }) {
   const [editing, setEditing] = useState(false);
-  const [pending, go] = useAction();
-  const [draft, setDraft] = useState({
-    description: task.description,
-    assignee: task.assignee ?? "",
-    dueDate: task.dueDate ?? "",
-    priority: task.priority ?? "medium",
-    destination: task.destination ?? "akiflow",
-  });
   const locked = task.status === "pushed";
   const dest = task.destination ?? "akiflow";
-  const canPush = integrations[dest];
-
-  const save = () =>
-    go(
-      () =>
-        editTask(task.id, {
-          description: draft.description,
-          assignee: draft.assignee || null,
-          dueDate: draft.dueDate || null,
-          priority: draft.priority,
-          destination: draft.destination,
-        }),
-      () => setEditing(false)
-    );
 
   return (
     // Actions sit beside the text when there's room (Tasks page), under it in the narrow recording sidebar.
@@ -102,35 +80,7 @@ export function TaskItem({
       )}
       <div className="min-w-0 flex-1 basis-[calc(100%-2rem)] @xl:basis-auto">
         {editing ? (
-          <div className="space-y-2">
-            <textarea
-              className="input h-auto min-h-16 py-2"
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              autoFocus
-            />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <input className="input h-8 text-xs" placeholder="Owner" value={draft.assignee} onChange={(e) => setDraft({ ...draft, assignee: e.target.value })} />
-              <input className="input h-8 text-xs" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} aria-label="Due date" />
-              <select className="input h-8 text-xs" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as typeof draft.priority })} aria-label="Priority">
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-              <select className="input h-8 text-xs" value={draft.destination} onChange={(e) => setDraft({ ...draft, destination: e.target.value as typeof draft.destination })} aria-label="Send to">
-                <option value="akiflow">Akiflow</option>
-                <option value="linear">Linear</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button className="btn btn-primary btn-sm" onClick={save} disabled={pending || !draft.description.trim()}>
-                Save
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
+          <TaskEditor task={task} onDone={() => setEditing(false)} />
         ) : (
           <>
             <button
@@ -169,49 +119,111 @@ export function TaskItem({
       </div>
       {!editing && (
         <div className={`flex shrink-0 items-center gap-1 ${selectable ? "ml-7" : ""} @xl:ml-0`}>
-          {pending && <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />}
-          {task.status === "pushed" ? (
-            task.externalUrl ? (
-              <a href={task.externalUrl} target="_blank" rel="noreferrer" className="badge badge-success hover:underline">
-                {task.externalId} <ExternalLink />
-              </a>
-            ) : (
-              <span className="badge badge-success">
-                <Check /> In Akiflow
-              </span>
-            )
-          ) : task.status === "dismissed" ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => go(() => setStatus([task.id], "pending"))} disabled={pending}>
-              <Undo2 /> Restore
-            </button>
-          ) : (
-            <>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                title="Dismiss"
-                onClick={() => go(() => setStatus([task.id], "dismissed"))}
-                disabled={pending}
-              >
-                <X />
-              </button>
-              {task.status === "pending" && (
-                <button className="btn btn-secondary btn-sm" onClick={() => go(() => setStatus([task.id], "approved"))} disabled={pending} title="Approve without sending yet">
-                  <Check /> Approve
-                </button>
-              )}
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => go(() => pushOne(task.id))}
-                disabled={pending || !canPush}
-                title={canPush ? `Send to ${dest === "linear" ? "Linear" : "Akiflow"}` : `${dest === "linear" ? "Linear" : "Akiflow"} isn't set up (Settings)`}
-              >
-                <Send /> Send
-              </button>
-            </>
-          )}
+          <TaskActions task={task} integrations={integrations} />
         </div>
       )}
     </div>
     </div>
+  );
+}
+
+/** The edit form for one action item: what, owner, due date, priority, destination. */
+export function TaskEditor({ task, onDone }: { task: TaskView; onDone: () => void }) {
+  const [pending, go] = useAction();
+  const [draft, setDraft] = useState({
+    description: task.description,
+    assignee: task.assignee ?? "",
+    dueDate: task.dueDate ?? "",
+    priority: task.priority ?? "medium",
+    destination: task.destination ?? "akiflow",
+  });
+  const save = () =>
+    go(
+      () =>
+        editTask(task.id, {
+          description: draft.description,
+          assignee: draft.assignee || null,
+          dueDate: draft.dueDate || null,
+          priority: draft.priority,
+          destination: draft.destination,
+        }),
+      onDone
+    );
+  return (
+    <div className="space-y-2">
+      <textarea
+        className="input h-auto min-h-16 py-2"
+        value={draft.description}
+        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+        autoFocus
+      />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <input className="input h-8 text-xs" placeholder="Owner" value={draft.assignee} onChange={(e) => setDraft({ ...draft, assignee: e.target.value })} />
+        <input className="input h-8 text-xs" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} aria-label="Due date" />
+        <select className="input h-8 text-xs" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as typeof draft.priority })} aria-label="Priority">
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select className="input h-8 text-xs" value={draft.destination} onChange={(e) => setDraft({ ...draft, destination: e.target.value as typeof draft.destination })} aria-label="Send to">
+          <option value="akiflow">Akiflow</option>
+          <option value="linear">Linear</option>
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={pending || !draft.description.trim()}>
+          Save
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Approve, dismiss, send or restore one action item; once sent, a link to it. */
+export function TaskActions({ task, integrations }: { task: TaskView; integrations: { akiflow: boolean; linear: boolean } }) {
+  const [pending, go] = useAction();
+  const dest = task.destination ?? "akiflow";
+  const canPush = integrations[dest];
+  return (
+    <>
+      {pending && <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />}
+      {task.status === "pushed" ? (
+        task.externalUrl ? (
+          <a href={task.externalUrl} target="_blank" rel="noreferrer" className="badge badge-success hover:underline">
+            {task.externalId} <ExternalLink />
+          </a>
+        ) : (
+          <span className="badge badge-success">
+            <Check /> In Akiflow
+          </span>
+        )
+      ) : task.status === "dismissed" ? (
+        <button className="btn btn-ghost btn-sm" onClick={() => go(() => setStatus([task.id], "pending"))} disabled={pending}>
+          <Undo2 /> Restore
+        </button>
+      ) : (
+        <>
+          <button className="btn btn-ghost btn-icon btn-sm" title="Dismiss" onClick={() => go(() => setStatus([task.id], "dismissed"))} disabled={pending}>
+            <X />
+          </button>
+          {task.status === "pending" && (
+            <button className="btn btn-secondary btn-sm" onClick={() => go(() => setStatus([task.id], "approved"))} disabled={pending} title="Approve without sending yet">
+              <Check /> Approve
+            </button>
+          )}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => go(() => pushOne(task.id))}
+            disabled={pending || !canPush}
+            title={canPush ? `Send to ${dest === "linear" ? "Linear" : "Akiflow"}` : `${dest === "linear" ? "Linear" : "Akiflow"} isn't set up (Settings)`}
+          >
+            <Send /> Send
+          </button>
+        </>
+      )}
+    </>
   );
 }
