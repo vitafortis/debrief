@@ -417,7 +417,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 
 | Rule | What happens |
 |---|---|
-| **Ask** | A small popup in the top right: *Zoom is using your microphone. Record this meeting?* Choose **Record** (optionally naming it), **Not now**, **Always record Zoom** or **Never for Zoom**. It doesn't take the keyboard, so typing in the call (or a shortcut in another app) never answers it. Unanswered, it goes away after a minute, as *Not now*. |
+| **Ask** | A small popup in the top right: *Start recording? Zoom is using your microphone.* Choose **Record** (optionally naming it first), ✕ for not now, or **Always record** or **Never ask** for Zoom. It doesn't take the keyboard, so typing in the call (or a shortcut in another app) never answers it. Unanswered, it goes away after a minute, as *Not now*. |
 | **Always record** | Recording starts straight away. |
 | **Never** | Nothing happens. |
 

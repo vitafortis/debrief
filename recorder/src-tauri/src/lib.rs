@@ -232,14 +232,16 @@ fn show_prompt(app: &AppHandle, p: Prompt) {
     *st.prompt.lock().unwrap() = Some(p.clone());
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
+        // Asking needs room for the name and Record; a notice, for a few lines of text.
+        let (w, h) = (360.0, if p.kind == "start" { 150.0 } else { 190.0 });
         // Shown without taking focus: keys typed into the call (or a screen
         // recorder) stay there instead of landing on Record.
-        if let Some(w) = app2.get_webview_window("prompt") {
-            let _ = w.emit("prompt", &p);
-            let _ = w.show();
+        if let Some(win) = app2.get_webview_window("prompt") {
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+            let _ = win.emit("prompt", &p);
+            let _ = win.show();
             return;
         }
-        let (w, h) = (380.0, 196.0);
         let mut b = WebviewWindowBuilder::new(&app2, "prompt", WebviewUrl::App("prompt.html".into()))
             .title("Debrief Recorder")
             .inner_size(w, h)
