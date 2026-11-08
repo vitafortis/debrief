@@ -232,10 +232,11 @@ fn show_prompt(app: &AppHandle, p: Prompt) {
     *st.prompt.lock().unwrap() = Some(p.clone());
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
+        // Shown without taking focus: keys typed into the call (or a screen
+        // recorder) stay there instead of landing on Record.
         if let Some(w) = app2.get_webview_window("prompt") {
             let _ = w.emit("prompt", &p);
             let _ = w.show();
-            let _ = w.set_focus();
             return;
         }
         let (w, h) = (380.0, 196.0);
@@ -246,7 +247,7 @@ fn show_prompt(app: &AppHandle, p: Prompt) {
             .decorations(false)
             .always_on_top(true)
             .skip_taskbar(true)
-            .focused(true)
+            .focused(false)
             .visible(false);
         #[cfg(target_os = "macos")]
         {

@@ -53,7 +53,6 @@ function show(p) {
   $("buttons").replaceChildren(...(start ? [button("Record", "btn-primary", "record"), button("Not now", "", "not_now")] : [button("OK", "", "close")]));
   $("more").replaceChildren(...(start ? [link(`Always record ${p.app}`, "always"), link(`Never for ${p.app}`, "never")] : []));
   countdown(start ? 60 : p.kind === "stopped" ? 8 : 20, start ? "not_now" : "close");
-  if (start) setTimeout(() => $("buttons").firstChild?.focus(), 50);
 }
 
 document.addEventListener("keydown", (e) => {

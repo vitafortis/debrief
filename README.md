@@ -417,11 +417,11 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 
 | Rule | What happens |
 |---|---|
-| **Ask** | A small popup in the top right: *Zoom is using your microphone. Record this meeting?* Choose **Record** (optionally naming it), **Not now**, **Always record Zoom** or **Never for Zoom**. Unanswered, it goes away after a minute, as *Not now*. |
+| **Ask** | A small popup in the top right: *Zoom is using your microphone. Record this meeting?* Choose **Record** (optionally naming it), **Not now**, **Always record Zoom** or **Never for Zoom**. It doesn't take the keyboard, so typing in the call (or a shortcut in another app) never answers it. Unanswered, it goes away after a minute, as *Not now*. |
 | **Always record** | Recording starts straight away. |
 | **Never** | Nothing happens. |
 
-- Rules match the app's name or bundle id, ignoring case: `zoom` matches `zoom.us`. The defaults are *Ask* for Zoom, Teams, Webex, Slack and FaceTime, and *Never* for Discord.
+- Rules match the app's name or bundle id, ignoring case: `zoom` matches `zoom.us`. The defaults are *Ask* for Zoom, Teams, Webex, Slack and FaceTime, and *Never* for Discord. Apps without a rule get the default (*Ask*), except screen recorders and dictation apps, which are left alone: Loom, OBS, QuickTime Player, Screen Studio, CleanShot X, Kap, Camtasia, Snagit, ScreenFlow, Voice Memos, Audio Hijack, Superwhisper, Wispr Flow, MacWhisper and the Snipping Tool. Add a rule for one of them to be asked after all.
 - **Any other app** has its own setting. Set it to *Record* to record everything except your *Never* list.
 - Browser calls (Google Meet) show up as the browser, e.g. *Google Chrome*.
 - Settings lists the apps using the microphone right now; click one to add a rule for it.
