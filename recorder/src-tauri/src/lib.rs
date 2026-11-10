@@ -124,6 +124,22 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
     Ok(())
 }
 
+/// Stopped by you, from the menu or Settings. The apps on the microphone are
+/// left alone until they let go of it, as with "Not now"; otherwise an
+/// "Always record" app still in the call would start a new recording within
+/// seconds. Snoozed first, since stopping takes a few seconds and the watch
+/// loop sees nothing recording as soon as it begins.
+fn stop_by_hand(app: &AppHandle, why: &str) {
+    let st = app.state::<State>();
+    let trigger = st.active.lock().unwrap().as_ref().and_then(|a| a.trigger.clone());
+    {
+        let mut snoozed = st.snoozed.lock().unwrap();
+        snoozed.extend(trigger);
+        snoozed.extend(detect::mic_users().into_iter().map(|u| u.name));
+    }
+    stop_recording(app, why);
+}
+
 fn stop_recording(app: &AppHandle, why: &str) {
     let st = app.state::<State>();
     let Some(mut a) = st.active.lock().unwrap().take() else { return };
@@ -346,7 +362,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 if app.state::<State>().active.lock().unwrap().is_some() {
                     // Finishing the window video can take seconds: not on the main thread, which would freeze the menu bar.
                     let app = app.clone();
-                    std::thread::spawn(move || stop_recording(&app, "stopped from the menu"));
+                    std::thread::spawn(move || stop_by_hand(&app, "stopped from the menu"));
                 } else if let Err(err) = start_recording(app, None, None) {
                     show_prompt(app, Prompt::error(format!("Couldn't start recording: {err}")));
                 }
@@ -588,7 +604,7 @@ fn status(st: S) -> StatusView {
 #[tauri::command]
 async fn toggle_recording(app: AppHandle) -> Result<(), String> {
     if app.state::<State>().active.lock().unwrap().is_some() {
-        stop_recording(&app, "stopped from Settings");
+        stop_by_hand(&app, "stopped from Settings");
         Ok(())
     } else {
         start_recording(&app, None, None).map_err(|e| e.to_string())
