@@ -426,7 +426,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 - Browser calls (Google Meet) show up as the browser, e.g. *Google Chrome*.
 - Settings lists the apps using the microphone right now; click one to add a rule for it.
 - A recording started for an app stops when that app has let go of the microphone for 45 seconds (adjustable). One started by hand runs until you stop it.
-- *Not now* holds until that app lets go of the microphone; the next call asks again.
+- *Not now* holds until that app lets go of the microphone; the next call asks again. Stopping a recording yourself does the same, even for an app set to *Always record*: it won't start again until the next call.
 
 **What's recorded.** Your microphone on the left channel and the call on the right, as Opus at 48 kbit/s: about 21 MB an hour. Pick a microphone in Settings, or turn off the computer's audio.
 
