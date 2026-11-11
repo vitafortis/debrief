@@ -1,5 +1,7 @@
-//! Checking GitHub for a newer recorder. The app isn't signed, so it can't
-//! update itself: it says there's an update and opens the download.
+//! Checking GitHub for a newer recorder. The newest recorder tag is found here;
+//! installing it is the updater plugin's job, with that release's latest.json
+//! (lib.rs). Releases without one, and builds without the updater's public key,
+//! open the download instead.
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -18,16 +20,18 @@ pub type Version = [u64; 3];
 pub struct Updates {
     /// This app's version.
     pub current: String,
-    pub state: &'static str, // "idle" | "checking" | "done" | "failed" | "dev"
+    pub state: &'static str, // "idle" | "checking" | "done" | "failed" | "installing" | "dev"
     pub error: Option<String>,
     /// A newer release, once a check has found one.
     pub available: Option<Release>,
+    /// Whether this build can install updates itself, rather than opening the download.
+    pub self_update: bool,
 }
 
 impl Updates {
     pub fn new(current: String) -> Self {
         let state = if current == DEV_VERSION { "dev" } else { "idle" };
-        Self { current, state, error: None, available: None }
+        Self { current, state, error: None, available: None, self_update: false }
     }
 }
 
@@ -37,6 +41,8 @@ pub struct Release {
     pub tag: String,
     /// The installer for this platform, or the release page where there isn't one.
     pub download_url: String,
+    /// What the updater reads: the signed update for each platform.
+    pub manifest_url: String,
 }
 
 /// The fields we need from GitHub's list of releases.
@@ -81,7 +87,12 @@ fn release_for(tag: &str) -> Release {
         Some(a) => format!("https://github.com/{REPO}/releases/download/{tag}/{a}"),
         None => format!("https://github.com/{REPO}/releases/tag/{tag}"),
     };
-    Release { version: tag.trim_start_matches(TAG_PREFIX).to_string(), tag: tag.to_string(), download_url }
+    Release {
+        version: tag.trim_start_matches(TAG_PREFIX).to_string(),
+        tag: tag.to_string(),
+        download_url,
+        manifest_url: format!("https://github.com/{REPO}/releases/download/{tag}/latest.json"),
+    }
 }
 
 /// Asks GitHub. Some(release) when it's newer than `current`.
@@ -147,6 +158,7 @@ mod tests {
         assert_eq!(r.version, "0.1.12");
         assert!(r.download_url.starts_with("https://github.com/vitafortis/debrief/releases/"));
         assert!(r.download_url.contains("recorder-v0.1.12"));
+        assert_eq!(r.manifest_url, "https://github.com/vitafortis/debrief/releases/download/recorder-v0.1.12/latest.json");
     }
 
     #[test]

@@ -441,7 +441,7 @@ See [step 4](#4-set-it-up-in-the-browser) for what each section holds. A few det
 
 **Copies on the computer.** Recordings stay in the recordings folder (Settings → *On this computer*) for 14 days after they're uploaded, then they're deleted; 0 deletes them as soon as Debrief has them. The server (and its archive) keeps the original.
 
-**Updates.** The recorder looks for a newer release on GitHub a minute after it starts and then once a day. When there is one, the menu shows *Update to 0.1.12…*, which downloads the installer; install it over the old one. Settings shows the version, with **Check for updates**, and Debrief's Settings → Recorder & devices shows the version each key was last used by. It isn't signed, so it can't update itself. Recorders from before 0.1.12 don't check: download the newest from Settings → Recorder & devices and install it over the old one.
+**Updates.** The recorder looks for a newer release on GitHub a minute after it starts and then once a day. When there is one, the menu shows *Update to 0.1.40…* and Settings shows **Install and restart**: it downloads the update, checks its signature, puts it in place of the old version and restarts, with no installer and, on a Mac, no Gatekeeper prompt. It won't while recording, since restarting would end the recording. If the update can't be installed that way, or the recorder was built without the [updater's key](#updates-to-the-recorder), the download opens instead; install it over the old one. Settings shows the version, with **Check for updates**, and Debrief's Settings → Recorder & devices shows the version each key was last used by. Recorders from before self-updating have to be updated by hand once more, and those from before 0.1.12 don't check at all: download the newest from Settings → Recorder & devices and install it over the old one.
 
 **Settings** are stored in `~/Library/Application Support/io.github.vitafortis.debrief.recorder/settings.json` (Mac) or `%APPDATA%\io.github.vitafortis.debrief.recorder\settings.json` (Windows), readable only by you, API key included. Logs are in `~/Library/Logs/io.github.vitafortis.debrief.recorder/` or `%LOCALAPPDATA%\io.github.vitafortis.debrief.recorder\logs\`.
 
@@ -672,6 +672,16 @@ macOS still blocks each newly downloaded version the first time: System Settings
 | `APPLE_TEAM_ID` | the 10 characters in brackets (also under Membership details) |
 
 Either way, the next build of the recorder is signed with the certificate, and checked that it is; a notarized one is also checked with Gatekeeper's own `spctl`, and its release notes say so. Install that version once and allow Microphone and Screen Recording one last time; later versions keep them. Delete the `.p12` once the secret is saved.
+
+### Updates to the recorder
+
+The recorder installs its own updates once the release workflow signs them. The key for that is Tauri's own, not Apple's, and costs nothing:
+
+1. With Node installed, run `npx @tauri-apps/cli@2 signer generate -w ~/.tauri/debrief-recorder.key` and choose a password. It writes the private key to that file and the public key to `~/.tauri/debrief-recorder.key.pub`.
+2. Add the secrets `TAURI_SIGNING_PRIVATE_KEY` (the contents of `~/.tauri/debrief-recorder.key`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the password).
+3. Put the contents of `~/.tauri/debrief-recorder.key.pub` in `recorder/src-tauri/tauri.conf.json` as `plugins.updater.pubkey`, and commit it.
+
+From then on, each release has a signed update for each platform and a `latest.json` listing them, and the build fails if the update doesn't verify against that public key. Keep the private key somewhere safe: releases signed with a different key won't install over versions that have the old public key, and have to be installed by hand.
 
 ## License
 

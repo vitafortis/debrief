@@ -19,6 +19,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_updater::UpdaterExt;
 use uuid::Uuid;
 
 struct Active {
@@ -363,16 +364,15 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = tauri_plugin_opener::open_path(dir, None::<&str>);
             }
             "update" => {
-                let available = app.state::<State>().updates.lock().unwrap().available.clone();
-                match available {
-                    Some(r) => {
-                        let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
+                let available = app.state::<State>().updates.lock().unwrap().available.is_some();
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    if !available {
+                        check_updates(&app, true);
+                    } else if let Err(e) = install_update(&app) {
+                        flash_update_item(&app, e);
                     }
-                    None => {
-                        let app = app.clone();
-                        std::thread::spawn(move || check_updates(&app, true));
-                    }
-                }
+                });
             }
             "settings" => open_settings(app),
             "quit" => {
@@ -392,6 +392,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 fn update_label(u: &update::Updates) -> String {
     match (&u.available, u.state) {
         (_, "checking") => "Checking for updates…".into(),
+        (Some(r), "installing") => format!("Installing {}…", r.version),
         (Some(r), _) => format!("Update to {}…", r.version),
         _ => "Check for updates…".into(),
     }
@@ -424,7 +425,7 @@ fn flash_update_item(app: &AppHandle, text: String) {
 fn check_updates(app: &AppHandle, by_hand: bool) -> update::Updates {
     let st = app.state::<State>();
     let mut u = st.updates.lock().unwrap();
-    if u.state == "dev" || u.state == "checking" {
+    if u.state == "dev" || u.state == "checking" || u.state == "installing" {
         let out = u.clone();
         drop(u);
         if by_hand && out.state == "dev" {
@@ -471,6 +472,86 @@ fn check_updates(app: &AppHandle, by_hand: bool) -> update::Updates {
         _ => set_update_item(app, label),
     }
     out
+}
+
+/// Whether this build has the updater's public key, so it can check and install
+/// updates itself. Builds without one (dev, or a release made without the
+/// updater secrets) open the download instead.
+fn can_self_update(app: &AppHandle) -> bool {
+    let key = app.config().plugins.0.get("updater").and_then(|u| u.get("pubkey")).and_then(|k| k.as_str());
+    key.is_some_and(|k| !k.trim().is_empty())
+}
+
+/// Installs the update the last check found and restarts into it. Files the app
+/// downloads itself aren't quarantined, so macOS doesn't stop it the way it stops
+/// a .dmg from the browser. Not while recording, since restarting would end it.
+/// Where this build or that release can't update in place, it opens the download.
+/// It blocks, so call it off the main thread; on success it doesn't return.
+fn install_update(app: &AppHandle) -> Result<(), String> {
+    let st = app.state::<State>();
+    if st.active.lock().unwrap().is_some() {
+        return Err("Stop recording first: updating restarts the recorder".into());
+    }
+    let mut u = st.updates.lock().unwrap();
+    let Some(r) = u.available.clone() else { return Ok(()) };
+    if u.state == "installing" {
+        return Ok(());
+    }
+    if !u.self_update {
+        drop(u);
+        let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
+        return Ok(());
+    }
+    u.state = "installing";
+    u.error = None;
+    let label = update_label(&u);
+    drop(u);
+    set_update_item(app, label);
+    log::info!("Installing Debrief Recorder {}", r.version);
+
+    let result = tauri::async_runtime::block_on(fetch_and_install(app, &r));
+    let mut u = st.updates.lock().unwrap();
+    u.state = "done";
+    let out = match result {
+        Ok(true) => {
+            drop(u);
+            log::info!("Installed {}; restarting", r.version);
+            app.restart();
+        }
+        Ok(false) => Err("A recording started, so it'll update another time".to_string()),
+        Err(e) => {
+            log::error!("Updating to {}: {e:#}", r.version);
+            u.state = "failed";
+            u.error = Some(format!("Couldn't update in place ({e}), so the download opened instead."));
+            let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
+            Ok(())
+        }
+    };
+    let label = update_label(&u);
+    drop(u);
+    set_update_item(app, label);
+    out
+}
+
+/// Fetches that release's update, checks its signature against our key, and
+/// puts it in place of this app. Ok(false) if a recording started while it
+/// downloaded: then nothing is replaced. On Windows the installer takes over
+/// and this process exits inside `install`.
+async fn fetch_and_install(app: &AppHandle, r: &update::Release) -> anyhow::Result<bool> {
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![tauri::Url::parse(&r.manifest_url)?])?
+        .timeout(Duration::from_secs(30))
+        .build()?;
+    let Some(update) = updater.check().await? else {
+        anyhow::bail!("{} isn't newer than this version", r.version);
+    };
+    let bytes = update.download(|_, _| {}, || {}).await?;
+    if app.state::<State>().active.lock().unwrap().is_some() {
+        return Ok(false);
+    }
+    update.install(bytes)?;
+    Ok(true)
 }
 
 // --- Commands for the windows --------------------------------------------------
@@ -648,12 +729,10 @@ async fn check_for_updates(app: AppHandle) -> Result<update::Updates, String> {
     tauri::async_runtime::spawn_blocking(move || check_updates(&app, false)).await.map_err(|e| e.to_string())
 }
 
-/// Opens the installer for the newer version the last check found.
+/// Settings → Install: installs the newer version the last check found and restarts.
 #[tauri::command]
-fn download_update(st: S) {
-    if let Some(r) = st.updates.lock().unwrap().available.clone() {
-        let _ = tauri_plugin_opener::open_url(r.download_url, None::<&str>);
-    }
+async fn install_update_now(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || install_update(&app)).await.map_err(|e| e.to_string())?
 }
 
 // --- Start-up ------------------------------------------------------------------
@@ -664,6 +743,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| open_settings(app)))
         .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -694,7 +774,10 @@ pub fn run() {
                 prompt: Mutex::new(None),
                 snoozed: Mutex::new(HashSet::new()),
                 tray: Mutex::new(None),
-                updates: Mutex::new(update::Updates::new(app.package_info().version.to_string())),
+                updates: Mutex::new(update::Updates {
+                    self_update: can_self_update(app.handle()),
+                    ..update::Updates::new(app.package_info().version.to_string())
+                }),
             });
             if first_run {
                 let _ = s.save(&settings_path);
@@ -753,7 +836,7 @@ pub fn run() {
             answer_prompt,
             open_folder,
             check_for_updates,
-            download_update
+            install_update_now
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app")

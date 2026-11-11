@@ -288,7 +288,7 @@ test.describe("signed in", () => {
     await page.getByLabel("Model name").fill("claude-e2e-model");
     await page.getByLabel("API key").fill("sk-ant-e2e-not-real");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Model name")).toHaveValue("claude-e2e-model");
     await expect(page.getByLabel("API key")).toHaveValue("");
@@ -298,7 +298,7 @@ test.describe("signed in", () => {
     await page.getByLabel("Model", { exact: true }).selectOption("claude-sonnet-5-5");
     await expect(page.getByLabel("Model name")).toHaveCount(0);
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
 
     // Picking another provider shows its own key and model.
     await page.getByRole("radio", { name: /^OpenAI/ }).click();

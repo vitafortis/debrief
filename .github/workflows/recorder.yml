@@ -6,7 +6,9 @@ name: Recorder
 # Developer ID and the notarizing secrets too, it's notarized and opens without
 # a Gatekeeper warning. Without a certificate it's signed ad hoc, as before. Windows is unsigned. Every build's installers are kept as workflow
 # artifacts, and every push to main publishes them as the latest GitHub
-# release. The version is major.minor from tauri.conf.json, with this
+# release. With the updater's key in the secrets, the release also carries a
+# signed update for each platform and a latest.json listing them, which the
+# app reads to install the update itself. The version is major.minor from tauri.conf.json, with this
 # workflow's run number as the patch: bump the minor there for a new series.
 on:
   push:
@@ -55,12 +57,17 @@ jobs:
             bundles: app,dmg
             ext: .dmg
             files: recorder/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            # What the app's updater downloads, next to its .sig.
+            update: recorder/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            update_ext: .app.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             rust_targets: x86_64-pc-windows-msvc
             bundles: nsis
             ext: .exe
             files: recorder/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            update: recorder/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            update_ext: .exe
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -123,6 +130,11 @@ jobs:
       # Tauri signs with the identity, and notarizes and staples when the notarizing
       # secrets are in its environment; they're only put there when set, since an
       # empty one would make it try and fail.
+      # The updater's key (README → Updates), from `tauri signer generate`:
+      #   TAURI_SIGNING_PRIVATE_KEY           the private key file's contents
+      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password, if it has one
+      # Its public key is plugins.updater.pubkey in tauri.conf.json. With the
+      # private key set, Tauri also builds a signed update for the app to install.
       - name: Build
         id: build
         env:
@@ -131,8 +143,21 @@ jobs:
           NOTARY_ID: ${{ secrets.APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPDATER_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          echo '{"version":"${{ needs.version.outputs.version }}"}' > version.json
+          updater=false
+          if [ -n "$UPDATER_KEY" ]; then
+            if [ -z "$(jq -r '.plugins.updater.pubkey // ""' src-tauri/tauri.conf.json)" ]; then
+              echo "::error::TAURI_SIGNING_PRIVATE_KEY is set but tauri.conf.json has no plugins.updater.pubkey"
+              exit 1
+            fi
+            export TAURI_SIGNING_PRIVATE_KEY="$UPDATER_KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$UPDATER_KEY_PASSWORD"
+            updater=true
+          fi
+          echo "updater=$updater" >> "$GITHUB_OUTPUT"
+          jq -n --arg v "${{ needs.version.outputs.version }}" --argjson u "$updater" \
+            '{version: $v} + (if $u then {bundle: {createUpdaterArtifacts: true}} else {} end)' > version.json
           signed=false notarized=false
           if [ "$RUNNER_OS" = macOS ] && [ -n "$CERT" ]; then
             export APPLE_SIGNING_IDENTITY="$IDENTITY"
@@ -163,12 +188,26 @@ jobs:
             spctl --assess --type execute --verbose=2 "$app"
             xcrun stapler validate "$app"
           fi
+      # The update is checked against the public key in tauri.conf.json, so a key
+      # pair that doesn't match fails here rather than in everyone's app.
+      - name: Check the update signature
+        if: runner.os == 'macOS' && steps.build.outputs.updater == 'true'
+        run: |
+          brew install --quiet minisign
+          jq -r .plugins.updater.pubkey src-tauri/tauri.conf.json | base64 --decode > "$RUNNER_TEMP/updater.pub"
+          update=$(ls ../${{ matrix.update }})
+          base64 --decode < "$update.sig" > "$RUNNER_TEMP/update.minisig"
+          minisign -V -p "$RUNNER_TEMP/updater.pub" -m "$update" -x "$RUNNER_TEMP/update.minisig"
       # The same file names every release, so releases/latest/download/<name> always works (Settings → Devices & keys links there).
       - name: Name the installer
         working-directory: .
         run: |
           mkdir dist
           cp ${{ matrix.files }} dist/Debrief-Recorder-${{ runner.os }}${{ matrix.ext }}
+          if [ "${{ steps.build.outputs.updater }}" = true ]; then
+            cp ${{ matrix.update }} dist/Debrief-Recorder-${{ runner.os }}${{ matrix.update_ext }}
+            cp ${{ matrix.update }}.sig dist/Debrief-Recorder-${{ runner.os }}${{ matrix.update_ext }}.sig
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: debrief-recorder-${{ runner.os }}
@@ -194,6 +233,28 @@ jobs:
             --jq '.[] | select((.draft or .prerelease) | not) | .tag_name | select(startswith("recorder-v")) | ltrimstr("recorder-v")' | sort -V | tail -n1)
           top=$(printf '%s\n%s\n' "$newest" "$VERSION" | sort -V | tail -n1)
           echo "make_latest=$([ "$top" = "$VERSION" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      # What the app's updater reads: each platform's update and its signature,
+      # from this release's own download links. The universal Mac build serves
+      # both Mac architectures. The .sig files go into it and aren't published.
+      - name: Write latest.json
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BASE: https://github.com/${{ github.repository }}/releases/download/recorder-v${{ needs.version.outputs.version }}
+        run: |
+          platforms='{}'
+          add() {
+            [ -f "dist/$2.sig" ] || return 0
+            platforms=$(jq --arg k "$1" --arg url "$BASE/$2" --arg sig "$(cat "dist/$2.sig")" '. + {($k): {url: $url, signature: $sig}}' <<< "$platforms")
+          }
+          add darwin-aarch64 Debrief-Recorder-macOS.app.tar.gz
+          add darwin-x86_64 Debrief-Recorder-macOS.app.tar.gz
+          add windows-x86_64 Debrief-Recorder-Windows.exe
+          rm -f dist/*.sig
+          if [ "$platforms" != '{}' ]; then
+            jq -n --arg v "$VERSION" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson p "$platforms" \
+              '{version: $v, pub_date: $date, platforms: $p}' > dist/latest.json
+            cat dist/latest.json
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: recorder-v${{ needs.version.outputs.version }}
@@ -204,3 +265,4 @@ jobs:
           body: |
             macOS — open the .dmg and drag Debrief Recorder to Applications. ${{ needs.version.outputs.mac_notarized == 'true' && 'It is signed and notarized, so it opens like any other app.' || 'It is not notarized: the first time, macOS blocks it; open System Settings → Privacy & Security and click Open Anyway.' }}
             Windows — run the installer. It is unsigned, so SmartScreen may warn: More info → Run anyway.
+            Already installed? Use Update in the recorder's menu or Settings: it installs the new version itself and restarts.
