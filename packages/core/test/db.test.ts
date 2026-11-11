@@ -267,11 +267,15 @@ test("a device's context applies only once set, and a calendar event wins over i
     .returning();
   const [t] = await db.insert(core!.transcripts).values({ recordingId: rec.id, content: "Roadmap for the side project." }).returning();
   assert.equal((await core!.getMeeting(db, t.id))!.context, null);
+  // In no context yet, so it shows whichever context the pages are filtered to.
+  assert.ok((await core!.listMeetings(db, { context: "acme" })).some((x) => x.id === t.id));
+  assert.ok((await core!.listUnviewed(db, "acme", 50)).items.some((x) => x.id === t.id));
   await core!.setDeviceRule(db, "home-pc", { context: "lumen", defaultDestination: "linear" });
   const m = await core!.getMeeting(db, t.id);
   assert.equal(m!.context, "lumen");
   assert.equal(m!.defaultDestination, "linear");
-  assert.deepEqual((await core!.listMeetings(db, { context: "lumen" })).map((x) => x.id), [t.id]);
+  assert.ok((await core!.listMeetings(db, { context: "lumen" })).some((x) => x.id === t.id));
+  assert.ok(!(await core!.listMeetings(db, { context: "acme" })).some((x) => x.id === t.id));
   assert.ok((await core!.listContexts(db)).includes("lumen"));
   const [task] = await core!.saveExtractedTasks(db, t.id, [{ description: "Draft the roadmap" }]);
   assert.deepEqual([task.context, task.destination], ["lumen", "linear"]);

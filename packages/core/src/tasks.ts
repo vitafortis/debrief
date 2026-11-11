@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, max, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, max, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "./db";
 import { getMeeting } from "./meetings";
@@ -115,7 +115,8 @@ export type TaskFilter = { status?: (typeof TASK_STATUSES)[number][]; context?: 
 export async function listTasks(db: Db, f: TaskFilter = {}) {
   const where: SQL[] = [];
   if (f.status?.length) where.push(inArray(tasks.status, f.status));
-  if (f.context) where.push(eq(tasks.context, f.context));
+  // Tasks with no context (from a recording with no event) show under every context.
+  if (f.context) where.push(or(eq(tasks.context, f.context), isNull(tasks.context))!);
   if (f.transcriptId) where.push(eq(tasks.transcriptId, f.transcriptId));
   const pe = db
     .selectDistinctOn([transcriptEvents.transcriptId], { transcriptId: transcriptEvents.transcriptId, eventId: transcriptEvents.eventId })

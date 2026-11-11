@@ -46,6 +46,12 @@ const primaryEvent = (db: Db) =>
 /** A meeting's context: its calendar's, else its device's when one is set in Settings. */
 export const meetingContext = sql<string | null>`coalesce(${calendars.context}, ${devices.context})`;
 
+/**
+ * Meetings in a context, plus those in none (no calendar event and no device
+ * context), which would otherwise vanish from every page filtered to one.
+ */
+export const inContext = (context: string) => sql`(${meetingContext} = ${context} or ${meetingContext} is null)`;
+
 export type MeetingFilter = {
   /** A calendar context ("acme"), or "unmatched" for meetings with no event. */
   context?: string | null;
@@ -71,7 +77,7 @@ export async function listMeetings(db: Db, f: MeetingFilter = {}) {
   if (f.from) where.push(gte(recordings.recordedAt, f.from));
   if (f.to) where.push(lt(recordings.recordedAt, f.to));
   if (f.context === "unmatched") where.push(sql`${pe.eventId} is null`);
-  else if (f.context) where.push(sql`${meetingContext} = ${f.context}`);
+  else if (f.context) where.push(inContext(f.context));
   const q = f.q?.trim();
   const query = sql`websearch_to_tsquery('english', ${q ?? ""})`;
   if (q) {
@@ -351,7 +357,7 @@ export async function markViewed(db: Db, transcriptId: string) {
 
 /** Transcripts that are ready but haven't been opened yet, newest first. */
 export async function listUnviewed(db: Db, context?: string | null, limit = 4) {
-  const rows = await listMeetingsWhere(db, [sql`${transcripts.viewedAt} is null`, ...(context ? [sql`${meetingContext} = ${context}`] : [])], 200);
+  const rows = await listMeetingsWhere(db, [sql`${transcripts.viewedAt} is null`, ...(context ? [inContext(context)] : [])], 200);
   return { count: rows.length, items: rows.slice(0, limit) };
 }
 
@@ -359,7 +365,7 @@ export type CleanupIssue = "empty" | "untitled" | "no-event" | "speakers" | "no-
 
 /** Recent transcripts that still need something: a name, an event, speaker names, a summary, tasks reviewed, or that are empty. */
 export async function listCleanup(db: Db, context?: string | null, limit = 50) {
-  const rows = await listMeetingsWhere(db, context ? [sql`${meetingContext} = ${context}`] : [], 300);
+  const rows = await listMeetingsWhere(db, context ? [inContext(context)] : [], 300);
   return rows
     .map((m) => {
       const issues: CleanupIssue[] = [];

@@ -77,7 +77,7 @@ export default async function RecordingsPage({ searchParams }: { searchParams: P
         title="Recordings"
         description={
           {
-            all: context ? `Recordings from ${context}, newest first.` : "Every recording, newest first.",
+            all: context ? `Recordings from ${context}, and those with no event, newest first.` : "Every recording, newest first.",
             new: "Transcribed, and not opened yet.",
             reviewed: "Transcribed and opened.",
             unmatched: "Recordings with no calendar event.",
