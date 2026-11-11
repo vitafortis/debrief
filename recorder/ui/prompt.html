@@ -7,30 +7,46 @@
     <style>
       html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; }
       body { padding: 6px; }
-      .pop { height: 100%; padding: 14px 14px 12px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 10px; }
-      .top { display: flex; gap: 10px; align-items: flex-start; }
-      .top img { width: 28px; height: 28px; flex: none; }
-      .actions { display: flex; gap: 6px; margin-top: auto; }
-      .actions .btn { flex: 1; }
-      .more { display: flex; gap: 12px; justify-content: center; font-size: 11.5px; }
-      .bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
-      .bar i { display: block; height: 100%; background: var(--primary); width: 100%; transition: width 1s linear; }
+      .pop { position: relative; height: 100%; overflow: hidden; padding: 12px 12px 13px 14px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 10px; }
+      .head { display: flex; gap: 10px; align-items: flex-start; }
+      .head img { width: 24px; height: 24px; flex: none; margin-top: 1px; }
+      .head h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #message { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .x { flex: none; width: 22px; height: 22px; margin: -3px -3px 0 0; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); }
+      .x:hover { background: var(--surface); color: var(--foreground); }
+      .x:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+      /* Lined up under the title. */
+      .ask, .foot { margin-left: 34px; }
+      .ask { display: flex; gap: 6px; }
+      .ask .input, .ask .btn { height: 28px; }
+      .ask .btn { padding: 0 11px; }
+      .ask .btn i { width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+      .foot { margin-top: auto; display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-height: 17px; }
+      .foot .link { color: var(--muted-foreground); }
+      .foot .link:hover { color: var(--primary); }
+      .foot .btn { margin-left: auto; }
+      [hidden] { display: none !important; }
+      .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+      .bar i { display: block; height: 100%; width: 100%; background: var(--primary); opacity: 0.45; transition: width 1s linear; }
     </style>
   </head>
   <body>
     <div class="card pop" data-tauri-drag-region>
-      <div class="top" data-tauri-drag-region>
+      <div class="head" data-tauri-drag-region>
         <img src="icon.png" alt="" />
         <div class="grow" data-tauri-drag-region>
-          <h2 id="title">Record this meeting?</h2>
+          <h2 id="title">Start recording?</h2>
           <p class="muted small" id="message"></p>
         </div>
+        <button class="x" id="close" aria-label="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+        </button>
       </div>
-      <div id="start-ui">
-        <input class="input" id="name" placeholder="Name it (optional; the calendar usually does)" spellcheck="false" />
-      </div>
-      <div class="actions" id="buttons"></div>
-      <div class="more" id="more"></div>
+      <form class="ask" id="start-ui">
+        <input class="input" id="name" placeholder="Name (optional)" spellcheck="false" autocomplete="off" />
+        <button class="btn btn-primary" type="submit"><i></i>Record</button>
+      </form>
+      <div class="foot" id="foot"></div>
       <div class="bar"><i id="bar"></i></div>
     </div>
     <script src="prompt.js"></script>

@@ -3,19 +3,19 @@ const { listen } = window.__TAURI__.event;
 const $ = (id) => document.getElementById(id);
 let timer = null;
 
-function button(text, cls, answer) {
-  const b = document.createElement("button");
-  b.className = `btn ${cls}`;
-  b.textContent = text;
-  b.addEventListener("click", () => send(answer));
-  return b;
-}
-function link(text, answer) {
+function link(text, answer, title) {
   const b = document.createElement("button");
   b.className = "link";
   b.textContent = text;
+  b.title = title;
   b.addEventListener("click", () => send(answer));
   return b;
+}
+function dot() {
+  const s = document.createElement("span");
+  s.className = "muted";
+  s.textContent = "·";
+  return s;
 }
 
 async function send(answer) {
@@ -44,21 +44,41 @@ function countdown(secs, answer) {
   }, 1000);
 }
 
+let current = null;
+
 function show(p) {
   if (!p) return;
+  current = p;
   const start = p.kind === "start";
-  $("title").textContent = start ? "Record this meeting?" : p.kind === "stopped" ? "Recording finished" : "Debrief Recorder";
+  $("title").textContent = start ? "Start recording?" : p.kind === "stopped" ? "Recording finished" : "Debrief Recorder";
+  $("title").title = $("title").textContent;
   $("message").textContent = p.message;
+  $("message").style.webkitLineClamp = start ? 2 : 6;
   $("start-ui").hidden = !start;
-  $("buttons").replaceChildren(...(start ? [button("Record", "btn-primary", "record"), button("Not now", "", "not_now")] : [button("OK", "", "close")]));
-  $("more").replaceChildren(...(start ? [link(`Always record ${p.app}`, "always"), link(`Never for ${p.app}`, "never")] : []));
+  $("close").title = start ? "Not now (Esc)" : "Close";
+  if (start) {
+    $("foot").replaceChildren(
+      link("Always record", "always", `Record ${p.app} from now on without asking`),
+      dot(),
+      link("Never ask", "never", `Leave ${p.app} alone from now on`)
+    );
+  } else {
+    const ok = document.createElement("button");
+    ok.className = "btn btn-sm";
+    ok.textContent = "OK";
+    ok.addEventListener("click", () => send("close"));
+    $("foot").replaceChildren(ok);
+  }
   countdown(start ? 60 : p.kind === "stopped" ? 8 : 20, start ? "not_now" : "close");
-  if (start) setTimeout(() => $("buttons").firstChild?.focus(), 50);
 }
 
+$("start-ui").addEventListener("submit", (e) => {
+  e.preventDefault();
+  send("record");
+});
+$("close").addEventListener("click", () => send(current?.kind === "start" ? "not_now" : "close"));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") send($("start-ui").hidden ? "close" : "not_now");
-  if (e.key === "Enter" && !$("start-ui").hidden) send("record");
 });
 listen("prompt", (e) => show(e.payload));
 invoke("current_prompt").then(show);

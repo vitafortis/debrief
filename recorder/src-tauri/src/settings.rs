@@ -22,6 +22,25 @@ pub struct AppRule {
     pub action: Action,
 }
 
+/// Apps that use the microphone without being a call: screen and audio
+/// recorders, dictation. Left alone unless a rule of yours says otherwise.
+/// Matched on the whole name, or on a bundle id or exe in the id, so "Loom"
+/// doesn't catch "Bloomberg".
+const NOT_CALLS: &[&str] = &[
+    "Loom", "OBS", "QuickTime Player", "Screen Studio", "CleanShot X", "Kap", "Camtasia", "Snagit", "ScreenFlow",
+    "Voice Memos", "Audio Hijack", "Superwhisper", "Wispr Flow", "MacWhisper", "Snipping Tool",
+];
+const NOT_CALL_IDS: &[&str] = &[
+    "com.loom.desktop", "com.obsproject.obs-studio", "com.apple.quicktimeplayerx", "com.apple.voicememos",
+    "\\loom.exe", "\\obs64.exe", "\\snippingtool.exe",
+];
+
+/// Whether an app is one of the known non-calls above.
+pub fn not_a_call(name: &str, id: &str) -> bool {
+    let id = id.to_lowercase();
+    NOT_CALLS.iter().any(|n| n.eq_ignore_ascii_case(name.trim())) || NOT_CALL_IDS.iter().any(|i| id.contains(i))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -123,7 +142,8 @@ impl Settings {
         Ok(())
     }
 
-    /// The rule for an app, by name or bundle id; the default when none matches.
+    /// The rule for an app, by name or bundle id. Without one, known non-calls
+    /// (screen recorders, dictation) are left alone and the rest get the default.
     pub fn action_for(&self, name: &str, bundle: &str) -> Action {
         let (n, b) = (name.to_lowercase(), bundle.to_lowercase());
         self.rules
@@ -133,7 +153,7 @@ impl Settings {
                 !a.is_empty() && (n.contains(&a) || b.contains(&a))
             })
             .map(|r| r.action)
-            .unwrap_or(self.default_action)
+            .unwrap_or(if not_a_call(name, bundle) { Action::Ignore } else { self.default_action })
     }
 
     /// Sets (or adds) the rule for an app, from the popup's "Always" / "Never".
@@ -184,5 +204,22 @@ mod tests {
         s.set_rule("zoom.us", Action::Record);
         assert_eq!(s.action_for("zoom.us", ""), Action::Record);
         assert_eq!(s.rules.iter().filter(|r| r.app.to_lowercase().contains("zoom")).count(), 1);
+    }
+
+    #[test]
+    fn screen_recorders_and_dictation_are_left_alone_unless_a_rule_says_so() {
+        let mut s = Settings::default();
+        s.default_action = Action::Record;
+        assert_eq!(s.action_for("Loom", "com.loom.desktop"), Action::Ignore);
+        assert_eq!(s.action_for("loom", ""), Action::Ignore);
+        assert_eq!(s.action_for("Something", "C:\\Users\\a\\AppData\\Local\\Programs\\Loom\\Loom.exe"), Action::Ignore);
+        assert_eq!(s.action_for("OBS", "com.obsproject.obs-studio"), Action::Ignore);
+        assert_eq!(s.action_for("Superwhisper", ""), Action::Ignore);
+        // Whole names only: these are calls (or might be), so they get the default.
+        assert_eq!(s.action_for("Bloomberg", "com.bloomberg.terminal"), Action::Record);
+        assert_eq!(s.action_for("Google Chrome", "com.google.Chrome"), Action::Record);
+        // A rule of yours wins.
+        s.set_rule("Loom", Action::Ask);
+        assert_eq!(s.action_for("Loom", "com.loom.desktop"), Action::Ask);
     }
 }
