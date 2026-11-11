@@ -146,7 +146,7 @@ test.describe("signed in", () => {
   });
 
   test("tasks: edit, approve, dismiss and restore", async ({ page }) => {
-    await page.goto("/tasks");
+    await page.goto("/tasks?status=pending");
     const row = page.locator("div.\\@container", { hasText: "Draft the new pricing page" });
     await row.getByRole("button", { name: /Draft the new pricing page/ }).click();
     await page.locator("textarea").fill("Draft the new pricing page with annual plans");
@@ -157,7 +157,7 @@ test.describe("signed in", () => {
     await page.getByRole("link", { name: /Approved/ }).click();
     await expect(page.getByText("Draft the new pricing page with annual plans")).toBeVisible();
 
-    await page.goto("/tasks");
+    await page.goto("/tasks?status=pending");
     const runbook = page.locator("div.\\@container", { hasText: "Update the runbook" });
     await runbook.getByTitle("Dismiss").click();
     await expect(runbook).toHaveCount(0);
@@ -166,12 +166,24 @@ test.describe("signed in", () => {
     await dismissed.getByRole("button", { name: "Restore" }).click();
     // Wait for the save to land (the row leaves the Dismissed list) before moving on.
     await expect(dismissed).toHaveCount(0);
-    await page.goto("/tasks");
+    await page.goto("/tasks?status=pending");
     await expect(page.getByText("Update the runbook")).toBeVisible();
   });
 
-  test("Send is off until the destination is set up", async ({ page }) => {
+  test("tasks: All lists every action item, and one opens its details", async ({ page }) => {
     await page.goto("/tasks");
+    await expect(page.getByText("Every action item from your recordings.")).toBeVisible();
+    await page.getByRole("button", { name: /Update the runbook/ }).click();
+    const panel = page.getByRole("complementary", { name: "Action item" });
+    await expect(panel.getByRole("heading", { name: /Update the runbook/ })).toBeVisible();
+    await expect(panel.getByText("To review", { exact: true }).first()).toBeVisible();
+    await expect(panel.getByRole("link", { name: /said at/ })).toHaveAttribute("href", /\/recordings\/[0-9a-f-]+\?t=\d+/);
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+  });
+
+  test("Send is off until the destination is set up", async ({ page }) => {
+    await page.goto("/tasks?status=pending");
     await expect(page.getByText("Neither Akiflow nor Linear is set up yet")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send", exact: true }).first()).toBeDisabled();
   });
