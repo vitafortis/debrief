@@ -18,6 +18,7 @@ import {
 } from "./schema";
 import { overlapScore, matchThreshold } from "./correlate";
 import { listVideos } from "./storage";
+import { setting } from "./settings";
 import { HL_END, HL_START } from "./search";
 
 /** What a meeting is called: a title set by hand, its calendar event's, the recorder's, or the date. */
@@ -139,6 +140,34 @@ export const isUntitled = (m: { title?: string | null; eventTitle?: string | nul
 
 export type MeetingSummary = Awaited<ReturnType<typeof listMeetings>>[number];
 
+/**
+ * Names the call's side from the calendar when it can only be one person: the
+ * event has exactly one attendee besides you (declined ones don't count). That
+ * names the recorder's OTHERS, or the one diarized speaker on the call's side
+ * of a recorder recording. Nothing for a single mixed track, where you're one
+ * of the diarized speakers too. Names given by hand win over these.
+ */
+export function speakersFromAttendees(
+  segments: { speaker?: string | null }[] | null | undefined,
+  attendees: { email: string; name: string | null; rsvpStatus: string | null }[],
+  me: Set<string>
+): Record<string, string> {
+  const others = attendees.filter((a) => !me.has(a.email.trim().toLowerCase()) && a.rsvpStatus !== "declined");
+  if (others.length !== 1) return {};
+  const name = others[0].name?.trim() || others[0].email;
+  const labels = new Set((segments ?? []).map((s) => s.speaker).filter(Boolean) as string[]);
+  if (labels.has("OTHERS")) return { OTHERS: name };
+  const diarized = [...labels].filter((l) => /^SPEAKER_\d+$/.test(l));
+  return labels.has("YOU") && diarized.length === 1 ? { [diarized[0]]: name } : {};
+}
+
+/** Your own addresses: Settings → Profile's email, and the Google accounts and calendar ids your calendars come from. */
+async function myEmails(db: Db) {
+  const cals = await db.select({ account: calendars.googleAccount, externalId: calendars.externalId, source: calendars.source }).from(calendars);
+  const all = [setting("OWNER_EMAIL"), ...cals.flatMap((c) => [c.account, c.source === "google" ? c.externalId : null])];
+  return new Set(all.filter((e): e is string => !!e && e.includes("@")).map((e) => e.trim().toLowerCase()));
+}
+
 /** One meeting: transcript, recording, every linked event with attendees, and its tasks. */
 export async function getMeeting(db: Db, transcriptId: string) {
   const [row] = await db
@@ -185,11 +214,14 @@ export async function getMeeting(db: Db, transcriptId: string) {
     .orderBy(asc(screens.atSecs));
   const videos = await listVideos(row.recording.filePath).catch(() => []);
   const event = events[0] ?? null;
+  const eventAttendeeRows = event ? attendees.filter((a) => a.eventId === event.id) : [];
+  const guessed = eventAttendeeRows.length ? speakersFromAttendees(row.transcript.speakerSegments, eventAttendeeRows, await myEmails(db)) : {};
   return {
     ...row,
+    transcript: { ...row.transcript, speakerNames: { ...guessed, ...row.transcript.speakerNames } },
     event,
     events,
-    attendees: event ? attendees.filter((a) => a.eventId === event.id) : [],
+    attendees: eventAttendeeRows,
     tasks: taskRows,
     /** What was presented on screen, with the text read from it. */
     screens: screenRows,

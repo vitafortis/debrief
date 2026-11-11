@@ -116,6 +116,23 @@ test("clock and speaker labels", () => {
   assert.equal(speakerName({ SPEAKER_01: "Sarah" }, "SPEAKER_01"), "Sarah");
 });
 
+test("the call's side is named after the one other attendee", async () => {
+  const { speakersFromAttendees } = await import("../src/meetings");
+  const me = new Set(["alex@example.com"]);
+  const att = (email: string, name: string | null = null, rsvpStatus: string | null = "accepted") => ({ email, name, rsvpStatus });
+  const two = [{ speaker: "YOU" }, { speaker: "OTHERS" }];
+  assert.deepEqual(speakersFromAttendees(two, [att("Alex@example.com", "Alex"), att("sam@example.org", "Sam Rivera")], me), { OTHERS: "Sam Rivera" });
+  // No name: the email. You not listed: still the one other person.
+  assert.deepEqual(speakersFromAttendees(two, [att("sam@example.org")], me), { OTHERS: "sam@example.org" });
+  // Declined attendees don't count; two or more others can't be told apart.
+  assert.deepEqual(speakersFromAttendees(two, [att("sam@example.org", "Sam"), att("kai@example.org", "Kai", "declined")], me), { OTHERS: "Sam" });
+  assert.deepEqual(speakersFromAttendees(two, [att("sam@example.org"), att("kai@example.org")], me), {});
+  // Diarized: the one speaker on the call's side of a recorder recording, but not in a single mixed track.
+  assert.deepEqual(speakersFromAttendees([{ speaker: "YOU" }, { speaker: "SPEAKER_01" }], [att("sam@example.org", "Sam")], me), { SPEAKER_01: "Sam" });
+  assert.deepEqual(speakersFromAttendees([{ speaker: "SPEAKER_00" }, { speaker: "SPEAKER_01" }], [att("sam@example.org", "Sam")], me), {});
+  assert.deepEqual(speakersFromAttendees([{ speaker: "YOU" }, { speaker: "SPEAKER_01" }, { speaker: "SPEAKER_02" }], [att("sam@example.org", "Sam")], me), {});
+});
+
 test("S3 links are path-style, presigned and expire", async () => {
   const { presignedAudioUrl } = await import("../src/storage");
   const env = { S3_BUCKET: "meetings", S3_ACCESS_KEY_ID: "AKIDEXAMPLE", S3_SECRET_ACCESS_KEY: "secret", S3_ENDPOINT: "https://minio.example.com/", S3_PREFIX: "debrief/" };

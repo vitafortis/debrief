@@ -343,7 +343,7 @@ Open one from the dashboard, **Recordings** or the **Calendar**.
 **Fixing the details:**
 - **Title:** click it to rename the recording. Leave it empty to use the calendar event's title.
 - **Calendar event:** if the time matching picked the wrong event, or nothing, choose the right one from the events around that time. *Match automatically* goes back to matching by time.
-- **Speakers:** with speaker labels on, the transcript says *Speaker 1*, *Speaker 2* and so on. Type names under **Speakers** and they're used everywhere: the transcript, search, exports and what Claude reads.
+- **Speakers:** with speaker labels on, the transcript says *Speaker 1*, *Speaker 2* and so on. Type names under **Speakers** and they're used everywhere: the transcript, search, exports and what Claude reads. With one other person on the calendar event, the call's side is named after them without typing: *Others* (or the one speaker on the call's side) becomes their name, or their email if the calendar has no name. That needs to know which attendee is you: your email in Settings → Profile, or the Google account the calendar comes from.
 - **Summary:** Claude writes one when it extracts tasks. Click it to edit, or write your own.
 
 **Shared screens:** when someone presented during a recorded call, the **Shared screens** tab beside the transcript shows each slide or document with its time (click it to play from there) and the text read from it. That text also goes into the summary, the exports and search by Claude.
