@@ -143,8 +143,9 @@ fn zoom_muted() -> Option<bool> {
 #[cfg(windows)]
 fn zoom_muted() -> Option<bool> {
     use crate::audio::system_win::processes;
-    use windows::core::{BOOL, VARIANT};
+    use windows::core::BOOL;
     use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::System::Variant::VARIANT;
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
     use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_ButtonControlTypeId, UIA_ControlTypePropertyId};
     use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
