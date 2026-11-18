@@ -53,6 +53,8 @@ pub struct Levels {
     pub system_heard: AtomicBool,
     /// Whether the microphone ever had anything in it.
     pub mic_heard: AtomicBool,
+    /// You're muted in the call app: the microphone's side is written as silence.
+    pub mic_muted: AtomicBool,
 }
 
 /// The other side of the call: nothing, everything the computer plays, or
@@ -231,7 +233,12 @@ fn mix(rx: Receiver<Chunk>, mut writer: OggOpusWriter, levels: Arc<Levels>) -> R
             let heard = if c.source == Source::Mic { &levels.mic_heard } else { &levels.system_heard };
             heard.store(true, Ordering::Relaxed);
         }
-        r.push(&c.samples, &mut queues[i]);
+        // Muted in the call: keep the timing, drop what was said.
+        if c.source == Source::Mic && levels.mic_muted.load(Ordering::Relaxed) {
+            r.push(&vec![0f32; c.samples.len()], &mut queues[i]);
+        } else {
+            r.push(&c.samples, &mut queues[i]);
+        }
         let q = &mut queues[i];
         if q.len() > MAX_BACKLOG {
             let extra = q.len() - LATENCY;

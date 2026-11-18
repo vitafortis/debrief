@@ -4,6 +4,7 @@
 
 pub mod audio;
 pub mod detect;
+pub mod mute;
 mod icons;
 pub mod screens;
 pub mod settings;
@@ -26,6 +27,8 @@ struct Active {
     rec: audio::Recording,
     /// Watching the meeting app's window for shared screens.
     screens: Option<screens::Watcher>,
+    /// Following Zoom's mute, for a Zoom call.
+    _mute: Option<mute::Watch>,
     local: store::Local,
     started: Instant,
     /// The app whose microphone use started it; it stops when that app lets go.
@@ -101,6 +104,11 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
         _ => audio::CallAudio::Everything,
     };
     let app_user = trigger.clone().filter(|u| !u.id.is_empty());
+    // A Zoom call: started for Zoom, or by hand while Zoom has the microphone.
+    let zoom = match &trigger {
+        Some(u) => mute::is_zoom(&u.name, &u.id),
+        None => detect::mic_users().iter().any(|u| mute::is_zoom(&u.name, &u.id)),
+    };
     let trigger = trigger.map(|u| u.name);
     let local = store::Local::new(trigger.clone(), title.filter(|t| !t.trim().is_empty()));
     std::fs::create_dir_all(local.dir(&root))?;
@@ -118,8 +126,9 @@ fn start_recording(app: &AppHandle, trigger: Option<detect::MicUser>, title: Opt
     log::info!("Recording {} ({})", local.id, trigger.as_deref().unwrap_or("by hand"));
     let started = Instant::now();
     let screens = app_user.filter(|_| s.capture_screens).map(|u| screens::Watcher::start(local.dir(&root), u.name, u.id, started, s.record_video));
+    let mute = (zoom && s.follow_zoom_mute).then(|| mute::Watch::start(rec.levels.clone()));
     *st.current_id.lock().unwrap() = Some(local.id);
-    *active = Some(Active { rec, screens, local, started, trigger, last_seen: Instant::now() });
+    *active = Some(Active { rec, screens, _mute: mute, local, started, trigger, last_seen: Instant::now() });
     drop(active);
     refresh_tray(app);
     Ok(())
@@ -145,6 +154,7 @@ fn stop_recording(app: &AppHandle, why: &str) {
     let st = app.state::<State>();
     let Some(mut a) = st.active.lock().unwrap().take() else { return };
     drop(a.screens.take());
+    drop(a._mute.take());
     let root = st.recordings.read().unwrap().clone();
     let mut local = a.local;
     let s = st.settings.read().unwrap().clone();
