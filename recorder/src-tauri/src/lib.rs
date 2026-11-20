@@ -5,6 +5,7 @@
 pub mod audio;
 pub mod detect;
 pub mod mute;
+pub mod setup;
 mod icons;
 pub mod screens;
 pub mod settings;
@@ -74,6 +75,7 @@ struct TrayMenu {
     toggle: MenuItem<tauri::Wry>,
     uploads: MenuItem<tauri::Wry>,
     update: MenuItem<tauri::Wry>,
+    settings: MenuItem<tauri::Wry>,
 }
 
 type S<'a> = tauri::State<'a, State>;
@@ -315,7 +317,9 @@ fn refresh_tray(app: &AppHandle) {
         (_, _, 1) => "Uploading 1 recording…".into(),
         (_, _, n) => format!("Uploading {n} recordings…"),
     };
-    let warn = !u.configured || u.online == Some(false);
+    // Something still to set up (a permission, the server) shows like uploads that can't go through.
+    let unfinished = setup::incomplete(app);
+    let warn = !u.configured || u.online == Some(false) || unfinished;
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let st = app2.state::<State>();
@@ -324,6 +328,7 @@ fn refresh_tray(app: &AppHandle) {
             let _ = t.status.set_text(&label);
             let _ = t.toggle.set_text(if recording { "Stop recording" } else { "Start recording" });
             let _ = t.uploads.set_text(&uploads);
+            let _ = t.settings.set_text(if unfinished { "Finish setting up…" } else { "Settings…" });
             let (icon, template) = icons::tray(recording, warn);
             let _ = t.icon.set_icon_with_as_template(Some(icon), template);
             let _ = t.icon.set_tooltip(Some(&label));
@@ -411,7 +416,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
-    *app.state::<State>().tray.lock().unwrap() = Some(TrayMenu { icon, status, toggle, uploads, update });
+    *app.state::<State>().tray.lock().unwrap() = Some(TrayMenu { icon, status, toggle, uploads, update, settings });
     Ok(())
 }
 
@@ -636,6 +641,7 @@ struct StatusView {
     recent: Vec<RecentView>,
     mic_users: Vec<String>,
     updates: update::Updates,
+    setup: Vec<setup::Step>,
 }
 
 #[derive(serde::Serialize)]
@@ -647,7 +653,8 @@ struct RecentView {
 }
 
 #[tauri::command]
-fn status(st: S) -> StatusView {
+fn status(app: AppHandle, st: S) -> StatusView {
+    let setup = setup::steps(&app);
     let root = st.recordings.read().unwrap().clone();
     let active = st.active.lock().unwrap();
     let (mic, sys) = active
@@ -691,7 +698,21 @@ fn status(st: S) -> StatusView {
         recent,
         mic_users: detect::mic_users().into_iter().map(|u| u.name).collect(),
         updates: st.updates.lock().unwrap().clone(),
+        setup,
     }
+}
+
+/// Settings → Quit and reopen: macOS applies Screen Recording only to a fresh start.
+#[tauri::command]
+async fn restart_app(app: AppHandle) {
+    stop_by_hand(&app, "restarting");
+    app.restart();
+}
+
+/// Settings → Set up: a step's button.
+#[tauri::command]
+fn setup_fix(app: AppHandle, key: String) -> Result<(), String> {
+    setup::fix(&app, &key)
 }
 
 // Async, so it runs off the main thread: stopping can take seconds.
@@ -815,7 +836,8 @@ pub fn run() {
             }
             build_tray(app.handle())?;
             watch(app.handle().clone());
-            if s.server_url.is_empty() || s.api_key.is_empty() {
+            // Until it's set up (the server, the permissions), Settings opens with the checklist.
+            if s.server_url.is_empty() || s.api_key.is_empty() || setup::incomplete(app.handle()) {
                 open_settings(app.handle());
             }
             // Keep the menu's upload line current.
@@ -849,7 +871,8 @@ pub fn run() {
                 }
             }
             // Settings tucks back into the tray when you click elsewhere, like a menu bar app.
-            tauri::WindowEvent::Focused(false) if w.label() == "settings" => {
+            // While setting up it stays, since granting a permission means going to System Settings and back.
+            tauri::WindowEvent::Focused(false) if w.label() == "settings" && !setup::incomplete(w.app_handle()) => {
                 let _ = w.hide();
             }
             _ => {}
@@ -865,6 +888,8 @@ pub fn run() {
             answer_prompt,
             open_folder,
             check_for_updates,
+            setup_fix,
+            restart_app,
             install_update_now
         ])
         .build(tauri::generate_context!())

@@ -118,6 +118,73 @@ function renderUpdates(u) {
   b.textContent = u.self_update ? "Install and restart" : "Download";
 }
 
+// The checklist: shown while anything is left, or until you've seen it all done once.
+let setupSeen = false;
+let setupKey = "";
+function renderSetup(steps) {
+  if (!steps) return;
+  const left = steps.filter((st) => st.state !== "ok");
+  const needed = left.filter((st) => st.required);
+  if (left.length) setupSeen = true;
+  $("setup").hidden = !setupSeen;
+  $("setup-title").textContent = needed.length ? "Finish setting up" : left.length ? "Almost done" : "All set";
+  $("setup-sub").textContent = needed.length
+    ? `${needed.length} more before it can record calls properly.`
+    : left.length
+      ? "Everything needed is done. The rest is optional."
+      : "Everything is set up.";
+  $("setup-restart").hidden = !steps.some((st) => st.key === "screen" && st.state !== "ok");
+  // Only rebuild when something changed, so a button isn't swapped out under the pointer.
+  const key = JSON.stringify(steps);
+  if (key === setupKey) return;
+  setupKey = key;
+  $("steps").replaceChildren(
+    ...steps.map((st) => {
+      const row = document.createElement("div");
+      const mark = document.createElement("span");
+      mark.className = `mark ${st.state}`;
+      mark.textContent = st.state === "ok" ? "✓" : st.state === "denied" ? "!" : "";
+      const text = document.createElement("div");
+      text.className = "grow";
+      const title = document.createElement("p");
+      title.className = "small";
+      title.style.fontWeight = "600";
+      title.textContent = st.title;
+      if (!st.required && st.state !== "ok") {
+        const opt = document.createElement("span");
+        opt.className = "opt";
+        opt.textContent = " · optional";
+        title.append(opt);
+      }
+      const detail = document.createElement("p");
+      detail.className = "muted small";
+      detail.textContent = st.detail;
+      text.append(title, detail);
+      row.append(mark, text);
+      if (st.action) {
+        const b = document.createElement("button");
+        b.className = `btn btn-sm ${st.required ? "btn-primary" : ""}`;
+        b.textContent = st.action;
+        b.addEventListener("click", async () => {
+          if (st.key === "connect") {
+            $("server_url").scrollIntoView({ behavior: "smooth", block: "center" });
+            $("server_url").focus();
+            return;
+          }
+          try {
+            await invoke("setup_fix", { key: st.key });
+          } catch (e) {
+            detail.textContent = String(e);
+          }
+          poll();
+        });
+        row.append(b);
+      }
+      return row;
+    })
+  );
+}
+
 async function poll() {
   let s;
   try {
@@ -167,6 +234,7 @@ async function poll() {
   );
 
   renderUpdates(s.updates);
+  renderSetup(s.setup);
 
   const known = (name) => settings?.rules.some((r) => r.app && name.toLowerCase().includes(r.app.toLowerCase()));
   const fresh = s.mic_users.filter((n) => !known(n));
@@ -179,6 +247,7 @@ async function poll() {
 }
 
 $("save").addEventListener("click", save);
+$("setup-restart").addEventListener("click", () => invoke("restart_app"));
 $("rec-toggle").addEventListener("click", async () => {
   try {
     await invoke("toggle_recording");
